@@ -1,0 +1,61 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Django / backend local data
+db.sqlite3
+*.sqlite3
+media/
+staticfiles/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+.parcel-cache/
+.next/
+.nuxt/
+coverage/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Logs and temp
+*.log
+*.tmp
+*.temp
+
+# Local artifacts
+skill-spark-ielts-main.zip
+fromtend/
+.venv_check/
+backend/pytest-cache-files-*/
+
+models/
+repo_clean/
+repo_publish/
+plan.txt
+
+
+backend/.venv_clean/
+backend/pytest-cache-files-*/
+

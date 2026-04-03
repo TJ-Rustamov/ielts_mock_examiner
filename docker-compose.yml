@@ -1,0 +1,65 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        INSTALL_VOICE: "${INSTALL_VOICE:-true}"
+    container_name: ielts_backend
+    env_file:
+      - ./backend/.env
+    environment:
+      DJANGO_SECRET_KEY: change-me
+      DEBUG: "true"
+      ALLOWED_HOSTS: "*"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173"
+      SQLITE_PATH: "/app/data/db.sqlite3"
+      GEMINI_SPEAKING_MODEL: "${GEMINI_SPEAKING_MODEL:-gemini-3.1-flash-lite-preview}"
+      GEMINI_WRITING_MODEL: "${GEMINI_WRITING_MODEL:-gemini-3.1-flash-lite-preview}"
+      GEMINI_TEMPERATURE: "${GEMINI_TEMPERATURE:-0.2}"
+      GEMINI_TOP_P: "${GEMINI_TOP_P:-0.8}"
+      KOKORO_MODEL_PATH: "${KOKORO_MODEL_PATH:-/models/Kokoro-82M/kokoro-v1_0.pth}"
+      KOKORO_VOICE: "${KOKORO_VOICE:-af_heart}"
+      KOKORO_LANG_CODE: "${KOKORO_LANG_CODE:-a}"
+      KOKORO_DEVICE: "${KOKORO_DEVICE:-cpu}"
+      WHISPER_MODEL_SIZE: "${WHISPER_MODEL_SIZE:-/models/faster-whisper-base.en}"
+      WHISPER_DEVICE: "${WHISPER_DEVICE:-cpu}"
+      WHISPER_COMPUTE_TYPE: "${WHISPER_COMPUTE_TYPE:-int8}"
+      MAX_AUDIO_SECONDS: "${MAX_AUDIO_SECONDS:-120}"
+      VAD_MODE: "${VAD_MODE:-2}"
+      VAD_SILENCE_FRAMES: "${VAD_SILENCE_FRAMES:-12}"
+      PCM_FORCE_TRANSCRIBE_SECONDS: "${PCM_FORCE_TRANSCRIBE_SECONDS:-6}"
+      PREP_SECONDS_PART2: "${PREP_SECONDS_PART2:-60}"
+      SPEAKING_SECONDS_PART1: "${SPEAKING_SECONDS_PART1:-300}"
+      SPEAKING_SECONDS_PART2: "${SPEAKING_SECONDS_PART2:-120}"
+      SPEAKING_SECONDS_PART3: "${SPEAKING_SECONDS_PART3:-300}"
+      SPEAKING_SECONDS_ALL: "${SPEAKING_SECONDS_ALL:-840}"
+    volumes:
+      - backend_data:/app/data
+      - backend_media:/app/media
+      - ./models:/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ielts_frontend
+    environment:
+      VITE_API_BASE_URL: "http://localhost:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "5173:5173"
+
+volumes:
+  backend_data:
+  backend_media:
