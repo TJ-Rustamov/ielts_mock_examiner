@@ -8,6 +8,7 @@
 !/docker-compose.yml
 !/backend/
 !/frontend/
+!/q2_tests.json
 
 # Globally ignore OS and editor files
 .DS_Store
