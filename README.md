@@ -103,3 +103,8 @@ docker logs --tail 80 ielts_frontend
 - Frontend source is in `frontend` (not `fromtend`).
 - Docker compose frontend build context is `./frontend`.
 - Large model files should stay under `models/` and not be committed unless explicitly intended.
+
+## License
+
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](LICENSE). 
+This strongly copyleft license is intended to ensure that the complete source code of this software remains open and freely accessible. Any modifications, improvements, or services (like SaaS or cloud hosting) built upon this project must also be open-sourced under the same terms. This restricts proprietary and closed-source profiteering off the software.
