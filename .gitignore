@@ -15,19 +15,21 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Python / Backend ignores
-backend/__pycache__/
-backend/**/*.py[cod]
-backend/**/*.pyo
-backend/**/*.pyd
-backend/.pytest_cache/
-backend/.mypy_cache/
-backend/.ruff_cache/
-backend/.coverage
-backend/htmlcov/
-backend/.venv/
-backend/venv/
-backend/env/
+# Globally ignore Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Backend specific ignores
 backend/db.sqlite3
 backend/*.sqlite3
 backend/media/
