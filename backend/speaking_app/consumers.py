@@ -339,8 +339,8 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         if part == "2" or part == "all":
             self.cue_card_generation_task = asyncio.create_task(self._generate_cue_card_audio_background())
 
-    async def _send_static_audio(self, filename: str, text: str):
-        if self.stop_requested:
+    async def _send_static_audio(self, filename: str, text: str, force: bool = False):
+        if self.stop_requested and not force:
             return
 
         await self._set_turn_state("examiner_speaking")
@@ -792,7 +792,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                             # Move to Part 2 if running in 'all' mode, or end if just '1'
                             if part == "1":
                                 self.conversation_history.append({"role": "assistant", "content": "Thank you, that is the end of Part 1 and the test."})
-                                await self._send_static_audio("farewell.wav", "Thank you, that is the end of Part 1 and the test.")
                                 self.stop_requested = True
                                 asyncio.create_task(self._finalize_session_start_background())
                                 return
@@ -843,7 +842,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                 if self.part3_questions_asked >= len(self.part3_topic_questions) and len(self.part3_topic_questions) > 0:
                     # Part 3 is done, finish the test
                     self.conversation_history.append({"role": "assistant", "content": "Thank you, that is the end of the speaking test."})
-                    await self._send_static_audio("farewell.wav", "Thank you, that is the end of the speaking test.")
                     self.stop_requested = True
                     asyncio.create_task(self._finalize_session_start_background())
                     return
@@ -1102,6 +1100,15 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             self.playback_timeout_task = None
         self.pending_playback_chunk_id = None
 
+        # Determine the farewell text based on history or default
+        farewell_text = "Thank you, that is the end of the speaking test."
+        if getattr(self.session, "part", "all") == "1":
+            farewell_text = "Thank you, that is the end of Part 1 and the test."
+        elif getattr(self.session, "part", "all") == "2" and not self._has_candidate_response():
+             farewell_text = "I see. We will now conclude the test. Thank you."
+
+        await self._send_static_audio("farewell.wav", farewell_text, force=True)
+
         transcript = "\n".join(
             [f"{item['role']}: {item['content']}" for item in self.conversation_history if item["role"] in {"assistant", "user"}]
         )
@@ -1110,11 +1117,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             report = self._build_not_commenced_report()
             await self._persist_session(status="finished", transcript=transcript, report=report)
             await self._set_turn_state("finished")
-            # Don't play if stop requested (e.g. manual cancel)
-            if not getattr(self, "stop_requested", False):
-                await self._send_static_audio("farewell.wav", "Thank you, that is the end of the speaking test.")
-                # Give it some time to play before closing
-                await asyncio.sleep(4)
+            await asyncio.sleep(4)
             await self.send_json(
                 {
                     "type": "session.report.final",
@@ -1187,8 +1190,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
 
             await self._persist_session(status="finished", transcript=transcript, report=report)
             try:
-                await self._send_static_audio("farewell.wav", "Thank you, that is the end of the speaking test.")
-                await asyncio.sleep(4)
                 await self.send_json(
                     {
                         "type": "session.report.final",
@@ -1429,7 +1430,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             if part_mode == "2":
                 self.conversation_history.append({"role": "user", "content": "[Candidate remained completely silent during Part 2]"})
                 self.conversation_history.append({"role": "assistant", "content": "I see. We will now conclude the test. Thank you."})
-                await self._send_static_audio("farewell.wav", "I see. We will now conclude the test. Thank you.")
                 self.stop_requested = True
                 asyncio.create_task(self._finalize_session_start_background())
                 return
@@ -1583,7 +1583,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             if part_mode == "2":
                 self.stop_requested = True
                 self.conversation_history.append({"role": "assistant", "content": "I see. We will now conclude the test. Thank you."})
-                await self._send_static_audio("farewell.wav", "I see. We will now conclude the test. Thank you.")
                 
                 async def finish_part2_and_eval():
                     try:

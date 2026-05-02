@@ -136,6 +136,9 @@ const SpeakingTest = () => {
     return () => {
       if (socketRef.current) socketRef.current.close();
       stopMicCapture();
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => undefined);
+      }
     };
   }, []);
 
@@ -556,10 +559,6 @@ const SpeakingTest = () => {
       mutedGainRef.current.disconnect();
       mutedGainRef.current = null;
     }
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => undefined);
-      audioContextRef.current = null;
-    }
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
@@ -671,6 +670,7 @@ const SpeakingTest = () => {
 
   const requestFinalReport = () => {
     stopAllPlayback();
+    stopRequestedRef.current = false;
     sendAudioChunk(new Uint8Array(640).buffer, true);
     stopMicCapture();
     setStartingSession(false);
