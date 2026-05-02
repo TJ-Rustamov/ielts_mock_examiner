@@ -1,61 +1,55 @@
-# OS / editor
+# Ignore everything in the root
+/*
+
+# Whitelist essential root files and directories
+!/.gitignore
+!/LICENSE
+!/README.md
+!/docker-compose.yml
+!/backend/
+!/frontend/
+
+# Globally ignore OS and editor files
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-.venv/
-venv/
-env/
+# Python / Backend ignores
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/**/*.pyo
+backend/**/*.pyd
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/.venv/
+backend/venv/
+backend/env/
+backend/db.sqlite3
+backend/*.sqlite3
+backend/media/
+backend/staticfiles/
+backend/.env
 
-# Django / backend local data
-db.sqlite3
-*.sqlite3
-media/
-staticfiles/
+# Node / Frontend ignores
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.parcel-cache/
+frontend/.next/
+frontend/.nuxt/
+frontend/coverage/
+frontend/.npm-cache/
 
-# Node / frontend
-node_modules/
-dist/
-build/
-.parcel-cache/
-.next/
-.nuxt/
-coverage/
-
-# Env and secrets
+# Ignore environment files
 .env
 .env.*
 !.env.example
-backend/.env
 
-# Logs and temp
+# Ignore logs and temp files
 *.log
 *.tmp
 *.temp
-
-# Local artifacts
-skill-spark-ielts-main.zip
-fromtend/
-.venv_check/
-backend/pytest-cache-files-*/
-
-models/
-repo_clean/
-repo_publish/
-plan.txt
-
-
-backend/.venv_clean/
-backend/pytest-cache-files-*/
-
