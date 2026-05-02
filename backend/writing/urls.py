@@ -7,6 +7,7 @@ from writing.views import (
     WritingEvaluateAPIView,
     WritingEvaluationDetailAPIView,
     WritingEvaluationListAPIView,
+    WritingBandEssaysStatusAPIView,
     WritingTopicImageUploadAPIView,
 )
 
@@ -14,6 +15,7 @@ urlpatterns = [
     path("sessions", WritingEvaluationListAPIView.as_view(), name="writing-evaluate-list"),
     path("evaluate", WritingEvaluateAPIView.as_view(), name="writing-evaluate"),
     path("evaluate/<int:evaluation_id>", WritingEvaluationDetailAPIView.as_view(), name="writing-evaluate-detail"),
+    path("evaluate/<int:evaluation_id>/band-essays", WritingBandEssaysStatusAPIView.as_view(), name="writing-band-essays-status"),
     path("upload-topic-image", WritingTopicImageUploadAPIView.as_view(), name="writing-upload-topic-image"),
     path("topics/random", RandomWritingTopicAPIView.as_view(), name="writing-topic-random"),
     path("admin/topics", AdminWritingTopicListCreateAPIView.as_view(), name="writing-admin-topic-list-create"),

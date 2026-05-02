@@ -8,6 +8,7 @@ type AuthUser = {
   username: string;
   is_staff?: boolean;
   is_superuser?: boolean;
+  avatar?: string;
 };
 
 export function getAuthToken(): string | null {
@@ -31,6 +32,11 @@ export function getCurrentUser(): AuthUser | null {
 export function isAdminUser(): boolean {
   const user = getCurrentUser();
   return Boolean(user && (user.is_staff || user.is_superuser));
+}
+
+export function getPostAuthRedirectPath(user?: AuthUser | null): string {
+  const resolvedUser = user ?? getCurrentUser();
+  return resolvedUser && (resolvedUser.is_staff || resolvedUser.is_superuser) ? '/admin' : '/';
 }
 
 function setAuth(token: string, user: AuthUser): void {

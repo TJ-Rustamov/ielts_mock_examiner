@@ -17,7 +17,10 @@ class WritingEvaluateResponseSerializer(serializers.Serializer):
     scores = serializers.DictField(child=serializers.FloatField())
     examiner_comments = serializers.CharField()
     corrections = serializers.ListField(child=serializers.DictField(), required=False)
+    criteria_feedback = serializers.DictField(required=False)
+    inline_suggestions = serializers.ListField(child=serializers.DictField(), required=False)
     word_count = serializers.IntegerField()
+    band_essays_status = serializers.CharField(required=False)
     created_at = serializers.DateTimeField()
 
 

@@ -75,7 +75,7 @@ class AIConfigurationSerializer(serializers.ModelSerializer):
             "streaming_enabled",
             "updated_at",
         ]
-        read_only_fields = ["updated_at"]
+        read_only_fields = ["writing_prompt", "speaking_prompt", "updated_at"]
 
 
 class SpeakingConfigurationSerializer(serializers.ModelSerializer):
@@ -94,8 +94,10 @@ class SpeakingQuestionSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "part",
-            "question",
-            "follow_up",
+            "topic",
+            "questions",
+            "cue_card",
+            "points",
             "is_active",
             "created_at",
             "updated_at",

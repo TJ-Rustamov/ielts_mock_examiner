@@ -3,11 +3,9 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Save } from 'lucide-react';
 import { fetchJson } from '@/lib/backend';
@@ -17,8 +15,8 @@ type AIConfig = {
   enabled_models: string[];
   writing_model: string;
   speaking_model: string;
-  writing_prompt: string;
-  speaking_prompt: string;
+  writing_prompt?: string;
+  speaking_prompt?: string;
   temperature: number;
   max_tokens: number;
   streaming_enabled: boolean;
@@ -78,9 +76,18 @@ const AIConfiguration = () => {
     setSaving(true);
     setError(null);
     try {
+      const payload = {
+        provider: config.provider,
+        enabled_models: config.enabled_models,
+        writing_model: config.writing_model,
+        speaking_model: config.speaking_model,
+        temperature: config.temperature,
+        max_tokens: config.max_tokens,
+        streaming_enabled: config.streaming_enabled,
+      };
       const updated = await fetchJson<AIConfig>('/api/admin/ai-config', {
         method: 'PUT',
-        body: JSON.stringify(config),
+        body: JSON.stringify(payload),
       });
       setConfig(updated);
     } catch (err) {
@@ -226,20 +233,6 @@ const AIConfiguration = () => {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader><CardTitle className="text-base">System Prompts</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Writing Evaluation Prompt</Label>
-              <Textarea rows={5} value={config.writing_prompt} onChange={(e) => setConfig((p) => (p ? { ...p, writing_prompt: e.target.value } : p))} />
-            </div>
-            <Separator />
-            <div className="space-y-2">
-              <Label>Speaking Evaluation Prompt</Label>
-              <Textarea rows={5} value={config.speaking_prompt} onChange={(e) => setConfig((p) => (p ? { ...p, speaking_prompt: e.target.value } : p))} />
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </AdminLayout>
   );

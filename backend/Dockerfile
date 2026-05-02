@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -12,8 +13,8 @@ RUN apt-get update \
 ARG INSTALL_VOICE=true
 
 COPY requirements-core.txt requirements-voice.txt requirements.txt ./
-RUN pip install --no-cache-dir -r requirements-core.txt
-RUN if [ "$INSTALL_VOICE" = "true" ]; then pip install --no-cache-dir -r requirements-voice.txt; fi
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements-core.txt
+RUN --mount=type=cache,target=/root/.cache/pip if [ "$INSTALL_VOICE" = "true" ]; then pip install -r requirements-voice.txt; fi
 
 COPY . .
 

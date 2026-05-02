@@ -1,0 +1,219 @@
+﻿s1: title
+IELTS Mock Examiner
+Graduation Project and Internship
+Presented by Azlarkhon Khasakhojaev (220263) and Javlonbek Rustamov (220237)
+Date of Presentation: [Add Date]
+
+s2: team members
+Team Members:
+- Azlarkhon Khasakhojaev (Student ID: 220263)
+- Javlonbek Rustamov (Student ID: 220237)
+Supervisor: [Add Supervisor Name]
+
+s3: presentation outline
+Presentation Outline
+- Problem Statement and Motivation
+- Project Objectives
+- Project Timeline
+- Solutions and System Architecture
+- Tools and Technologies
+- Development Process
+- Challenges and Resolutions
+- Results and Live Demonstration
+- Future Scope and Impact
+- Conclusion, Contributions, References, Acknowledgment
+
+s4: problem statement and motivation
+IELTS learners need frequent writing and speaking practice, but consistent expert feedback is limited by cost and availability.
+Current preparation is often fragmented across separate apps/tools for writing, speaking, and progress tracking.
+Our motivation is to provide one practical, AI-assisted platform for both writing and speaking workflows.
+
+s5: why this problem matters
+Why this matters:
+- Delayed feedback slows skill improvement.
+- Learners need repeated mock practice under realistic conditions.
+- Teachers/tutors cannot always provide instant individualized review.
+- A unified digital platform improves accessibility and learning consistency.
+
+s6: project objectives
+Project Objectives
+- Build a full-stack IELTS practice platform for Writing and Speaking.
+- Implement secure user access and modular backend APIs.
+- Add AI-assisted writing evaluation workflow.
+- Add speaking workflow with VAD, STT, and TTS integrations.
+- Deploy backend and frontend together via Docker Compose.
+
+s7: objective completion summary
+Objective Completion Status
+- Full-stack architecture: completed.
+- Writing evaluation module: completed and integrated.
+- Speaking module API/realtime infrastructure: completed.
+- Containerized local deployment with health checks: completed.
+- Baseline testing and validation: completed for functional integration.
+
+s8: project timeline
+Project Timeline (high level)
+- Phase 1: Requirements and scope definition
+- Phase 2: Backend module implementation
+- Phase 3: Frontend interfaces and workflow integration
+- Phase 4: AI/speech pipeline integration
+- Phase 5: Dockerized deployment and validation
+- Phase 6: Reporting and presentation preparation
+
+s9: timeline details
+Timeline Details
+- Early stage: architecture planning, route/module design.
+- Middle stage: writing and speaking feature development.
+- Late stage: integration, runtime configuration, stability checks.
+- Final stage: documentation, report compilation, and demo readiness.
+
+s10: solution overview
+Solution Overview
+IELTS Mock Examiner is a web platform that combines:
+- Writing task submission and AI-assisted evaluation.
+- Speaking practice workflow with audio processing support.
+- User authentication and module-oriented navigation.
+- Configurable runtime settings for model and timing behavior.
+
+s11: system architecture
+System Architecture
+- Frontend: React + Vite + TypeScript UI.
+- Backend: Django + DRF + Channels.
+- API groups: /api/, /api/auth/, /api/writing/, /api/speaking/.
+- Data/runtime: SQLite path config, media/cache mounts.
+- Deployment: Docker Compose orchestrating backend and frontend.
+
+s12: backend modules
+Backend Module Breakdown
+- core: base/health endpoints and foundational services.
+- accounts: authentication endpoints and token-based access.
+- writing: writing topics, submissions, and evaluation pipeline.
+- speaking_app: speaking endpoints and realtime interaction logic.
+- ai_services: Gemini, STT/TTS, VAD and prompt utilities.
+
+s13: writing module flow
+Writing Module Flow
+1. User selects writing task and submits essay.
+2. Backend validates and forwards request to evaluation pipeline.
+3. Gemini-configured service generates feedback and scoring structure.
+4. Response is returned to frontend for user review.
+
+s14: speaking module flow
+Speaking Module Flow
+1. User starts speaking session from frontend.
+2. Audio is segmented using VAD-based logic.
+3. STT configuration is used for transcription.
+4. TTS configuration is used for spoken responses/interaction support.
+5. Backend returns structured responses for continued session flow.
+
+s15: tools and technologies used
+Tools and Technologies Used
+- Backend: Python, Django, Django REST Framework, Channels
+- Frontend: React, Vite, TypeScript, Tailwind CSS, shadcn/ui
+- AI/Speech: Gemini model config, Whisper model path config, Kokoro model path config, WebRTC VAD logic
+- DevOps: Docker, Docker Compose
+
+s16: environment and configuration
+Environment and Configuration
+- Config through `backend/.env` and compose environment variables.
+- Model and timing parameters are externally configurable.
+- SQLite path configured via `SQLITE_PATH`.
+- Health check endpoint supports startup coordination.
+
+s17: development process
+Development Process
+- Iterative development by feature modules.
+- API-first backend implementation, then frontend integration.
+- Continuous local validation through containerized stack.
+- Incremental refinement of prompts, audio timing, and routing behavior.
+
+s18: quality and validation approach
+Quality and Validation Approach
+- Route/module verification for auth, writing, and speaking APIs.
+- Integration checks for backend/frontend connectivity.
+- Runtime checks for container startup order and health readiness.
+- Functional review of user flows in writing and speaking pages.
+
+s19: challenges encountered
+Challenges Encountered
+- Coordinating multiple AI/speech components in one workflow.
+- Maintaining smooth speaking flow with timing and silence detection.
+- Keeping configuration flexible without hardcoding model/runtime values.
+- Ensuring reliable local deployment across services.
+
+s20: resolutions
+Resolutions
+- Modularized backend into focused apps for separation of concerns.
+- Exposed timing and model parameters via environment variables.
+- Added health-check-based dependency control in Docker Compose.
+- Standardized API routes for predictable frontend integration.
+
+s21: results
+Results
+- Operational full-stack IELTS practice platform delivered.
+- Writing and speaking modules integrated in one user-facing system.
+- Containerized deployment enables reproducible local startup.
+- Architecture supports future feature growth without major redesign.
+
+s22: live demonstration plan
+Live Demonstration Plan
+- Demo 1: Login/Register and dashboard navigation.
+- Demo 2: Submit writing response and show evaluation output.
+- Demo 3: Start speaking flow and show interaction pipeline.
+- Demo 4: Show Dockerized service health and connectivity.
+
+s23: impact of the project
+Impact of the Project
+- Improves accessibility of IELTS practice support.
+- Reduces dependence on fully manual feedback cycles.
+- Creates a reusable academic/technical foundation for AI-assisted language learning tools.
+
+s24: future scope
+Future Scope
+- Add quantitative benchmarking for latency and quality consistency.
+- Expand analytics dashboards for learner progress tracking.
+- Improve scoring explainability and rubric-level insights.
+- Strengthen speaking session orchestration and transcript intelligence.
+
+s25: summary and conclusion
+Summary and Conclusion
+IELTS Mock Examiner meets the core project objectives by delivering a modular, deployable, and integrated writing-speaking practice platform. The system is functional today and prepared for deeper evaluation and scaling.
+
+s26: lessons learned
+Top Lessons Learned
+- Modular architecture significantly simplifies debugging and feature extension.
+- Early integration testing reduces late-stage deployment issues.
+- Config-driven AI/speech pipelines are essential for experimentation and maintainability.
+
+s27: project contribution breakdown
+Project Contribution Breakdown
+Azlarkhon Khasakhojaev (220263): [Fill exact ownership split]
+Javlonbek Rustamov (220237): [Fill exact ownership split]
+Suggested split categories: backend modules, frontend pages, AI integration, deployment/documentation.
+
+s28: references
+References
+- Django Documentation
+- Django REST Framework Documentation
+- React Documentation
+- Vite Documentation
+- Django Channels Documentation
+- Model sources used in project setup (as listed in repository README)
+
+s29: acknowledgment
+Acknowledgment
+We thank our supervisor, department faculty, and peers for guidance and feedback throughout development, testing, and presentation preparation.
+
+s30: backup slide - api endpoints
+Backup Slide: Key API Endpoint Groups
+- /api/ (core)
+- /api/auth/ (authentication)
+- /api/writing/ (writing workflows)
+- /api/speaking/ (speaking workflows)
+
+s31: backup slide - deployment snapshot
+Backup Slide: Deployment Snapshot
+- Backend service: port 8000
+- Frontend service: port 5173
+- Compose-based startup with backend healthcheck dependency
+- Configurable model/runtime values through environment variables

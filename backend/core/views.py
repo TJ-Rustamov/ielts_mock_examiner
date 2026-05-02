@@ -160,6 +160,11 @@ class AIConfigurationAPIView(APIView):
         return Response({"config": AIConfigurationSerializer(obj).data, "model_catalog": MODEL_CATALOG})
 
     def put(self, request):
+        if "writing_prompt" in request.data or "speaking_prompt" in request.data:
+            return Response(
+                {"error": "prompt_edit_disabled", "message": "Prompts are managed in code and cannot be edited from admin."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         obj, _ = AIConfiguration.objects.get_or_create(id=1)
         serializer = AIConfigurationSerializer(obj, data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -188,6 +193,62 @@ class SpeakingConfigurationAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class SpeakingQuestionImportAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsStaffOrSuperuser]
+
+    def post(self, request):
+        import json
+        
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response({"error": "missing_file"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            content = file_obj.read()
+            if isinstance(content, bytes):
+                content = content.decode('utf-8', errors='replace')
+            data = json.loads(content)
+        except Exception as e:
+            return Response({"error": "invalid_json", "details": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Assuming data structure matches q2_tst.json with parts
+        added_count = 0
+        try:
+            for part_key, items in data.items():
+                if part_key == "part1":
+                    for item in items:
+                        SpeakingQuestion.objects.create(
+                            part=1,
+                            topic=item.get("topic", ""),
+                            questions=item.get("questions", []),
+                            is_active=True
+                        )
+                        added_count += 1
+                elif part_key == "part2":
+                    for item in items:
+                        SpeakingQuestion.objects.create(
+                            part=2,
+                            topic=item.get("topic", ""),
+                            cue_card=item.get("cue_card", ""),
+                            points=item.get("points", []),
+                            is_active=True
+                        )
+                        added_count += 1
+                elif part_key == "part3":
+                    for item in items:
+                        SpeakingQuestion.objects.create(
+                            part=3,
+                            topic=item.get("topic", ""),
+                            questions=item.get("questions", []),
+                            is_active=True
+                        )
+                        added_count += 1
+        except Exception as e:
+             return Response({"error": "import_failed", "details": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"status": "ok", "added_count": added_count})
 
 
 class SpeakingQuestionListCreateAPIView(APIView):

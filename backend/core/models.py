@@ -29,8 +29,10 @@ class SpeakingConfiguration(models.Model):
 
 class SpeakingQuestion(models.Model):
     part = models.PositiveSmallIntegerField()
-    question = models.TextField()
-    follow_up = models.TextField(blank=True, default="")
+    topic = models.CharField(max_length=255, default="General")
+    questions = models.JSONField(default=list, blank=True)
+    cue_card = models.TextField(blank=True, default="")
+    points = models.JSONField(default=list, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -39,4 +41,4 @@ class SpeakingQuestion(models.Model):
         ordering = ["part", "-created_at"]
 
     def __str__(self) -> str:
-        return f"SpeakingQuestion(id={self.id}, part={self.part})"
+        return f"SpeakingQuestion(id={self.id}, part={self.part}, topic={self.topic})"

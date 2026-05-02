@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
-import { login, register } from '@/lib/auth';
+import { getPostAuthRedirectPath, login, register } from '@/lib/auth';
 
 const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -21,12 +21,8 @@ const Auth = () => {
     setError(null);
 
     try {
-      if (isSignUp) {
-        await register(username, password);
-      } else {
-        await login(username, password);
-      }
-      navigate('/');
+      const user = isSignUp ? await register(username, password) : await login(username, password);
+      navigate(getPostAuthRedirectPath(user), { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Authentication failed';
       if (message.toLowerCase().includes('failed to fetch')) {
@@ -51,10 +47,8 @@ const Auth = () => {
         className="w-full max-w-md relative z-10"
       >
         <motion.div className="text-center mb-8" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="inline-block mb-3">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto glow-sm">
-              <Sparkles className="h-8 w-8 text-primary" />
-            </div>
+          <div className="flex justify-center mb-6">
+            <img src="/logo.png" alt="Logo" className="h-48 w-auto drop-shadow-lg" />
           </div>
           <h1 className="text-3xl font-bold font-heading text-foreground">IELTS Mastery</h1>
           <p className="text-muted-foreground mt-2">Simple username/password login</p>

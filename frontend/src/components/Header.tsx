@@ -10,7 +10,7 @@ const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const authed = isAuthenticated();
-  const user = getCurrentUser();
+  const user = getCurrentUser() as any;
 
   const tabs = [
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -67,9 +67,16 @@ const Header = () => {
             <Settings className="h-4 w-4" />
           </Button>
           {authed ? (
-            <Button variant="ghost" size="icon" onClick={async () => { await logoutRemote(); navigate('/auth'); }} className="hover:bg-primary/10" title={`Logout ${user?.username || ''}`}>
-              <LogOut className="h-4 w-4" />
-            </Button>
+            <>
+              {user?.avatar && (
+                <div className="w-8 h-8 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center mr-2">
+                  {user.avatar.length > 10 ? <img src={user.avatar} alt="avatar" className="w-full h-full object-cover" /> : <span className="text-sm">{user.avatar}</span>}
+                </div>
+              )}
+              <Button variant="ghost" size="icon" onClick={async () => { await logoutRemote(); navigate('/auth'); }} className="hover:bg-primary/10" title={`Logout ${user?.username || ''}`}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </>
           ) : (
             <Button variant="ghost" size="icon" onClick={() => navigate('/auth')} className="hover:bg-primary/10">
               <User className="h-4 w-4" />

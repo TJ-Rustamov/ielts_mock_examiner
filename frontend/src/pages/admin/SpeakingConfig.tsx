@@ -6,18 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Plus, Save, Trash2, Volume2 } from 'lucide-react';
+import { Save, Volume2 } from 'lucide-react';
 import { fetchJson } from '@/lib/backend';
-
-type SpeakingQuestion = {
-  id: number;
-  part: 1 | 2 | 3;
-  question: string;
-  follow_up: string;
-  is_active: boolean;
-};
 
 type SpeakingVoiceConfig = {
   tts_provider: string;
@@ -29,7 +19,6 @@ type SpeakingConfigResponse = {
   voice: SpeakingVoiceConfig;
   providers: string[];
   voices: string[];
-  questions: SpeakingQuestion[];
 };
 
 type TTSPreviewResponse = {
@@ -38,13 +27,9 @@ type TTSPreviewResponse = {
 };
 
 const SpeakingConfig = () => {
-  const [questions, setQuestions] = useState<SpeakingQuestion[]>([]);
   const [voiceConfig, setVoiceConfig] = useState<SpeakingVoiceConfig>({ tts_provider: 'kokoro', voice: 'af_heart', speed: 1 });
   const [providers, setProviders] = useState<string[]>(['kokoro']);
   const [voices, setVoices] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'1' | '2' | '3'>('1');
-  const [isAddOpen, setIsAddOpen] = useState(false);
-  const [newQ, setNewQ] = useState({ question: '', followUp: '', part: 1 as 1 | 2 | 3 });
   const [previewText, setPreviewText] = useState('Hello, this is a voice preview test.');
   const [previewAudioUrl, setPreviewAudioUrl] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -59,7 +44,6 @@ const SpeakingConfig = () => {
       const fetchedVoices = data.voices || [];
       const voiceList = fetchedVoices.length ? fetchedVoices : [data.voice.voice];
       setVoices(Array.from(new Set(voiceList)));
-      setQuestions(data.questions);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load speaking config');
     }
@@ -114,90 +98,12 @@ const SpeakingConfig = () => {
     }
   };
 
-  const addQuestion = async () => {
-    setError(null);
-    try {
-      const created = await fetchJson<SpeakingQuestion>('/api/admin/speaking-questions', {
-        method: 'POST',
-        body: JSON.stringify({
-          part: newQ.part,
-          question: newQ.question,
-          follow_up: newQ.part === 2 ? newQ.followUp : '',
-          is_active: true,
-        }),
-      });
-      setQuestions((prev) => [...prev, created]);
-      setIsAddOpen(false);
-      setNewQ({ question: '', followUp: '', part: 1 });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add question');
-    }
-  };
-
-  const toggleQuestion = async (item: SpeakingQuestion) => {
-    setError(null);
-    try {
-      const updated = await fetchJson<SpeakingQuestion>(`/api/admin/speaking-questions/${item.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ is_active: !item.is_active }),
-      });
-      setQuestions((prev) => prev.map((q) => (q.id === item.id ? updated : q)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update question');
-    }
-  };
-
-  const deleteQuestion = async (id: number) => {
-    setError(null);
-    try {
-      await fetchJson<{}>(`/api/admin/speaking-questions/${id}`, { method: 'DELETE' });
-      setQuestions((prev) => prev.filter((q) => q.id !== id));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete question');
-    }
-  };
-
-  const byPart = useMemo(
-    () => ({
-      1: questions.filter((q) => q.part === 1),
-      2: questions.filter((q) => q.part === 2),
-      3: questions.filter((q) => q.part === 3),
-    }),
-    [questions]
-  );
-
-  const renderQuestions = (part: 1 | 2 | 3) => {
-    const list = byPart[part];
-    if (!list.length) return <p className="text-center py-6 text-sm text-muted-foreground">No questions yet.</p>;
-
-    return (
-      <div className="space-y-2">
-        {list.map((q) => (
-          <Card key={q.id} className={!q.is_active ? 'opacity-50' : ''}>
-            <CardContent className="flex items-start gap-3 p-3">
-              <div className="flex-1">
-                <p className="text-sm text-foreground font-medium">{q.question}</p>
-                {q.follow_up && <p className="text-xs text-muted-foreground mt-1">{q.follow_up}</p>}
-              </div>
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="sm" onClick={() => toggleQuestion(q)}>{q.is_active ? 'Disable' : 'Enable'}</Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteQuestion(q.id)}>
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
-  };
-
   return (
     <AdminLayout>
       <div className="space-y-6 max-w-3xl">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Speaking Config</h1>
-          <p className="text-muted-foreground text-sm mt-1">Manage voice settings, preview TTS, and speaking questions</p>
+          <p className="text-muted-foreground text-sm mt-1">Manage voice settings and preview TTS</p>
           {error && <p className="text-sm text-destructive mt-2">{error}</p>}
         </div>
 
@@ -255,56 +161,6 @@ const SpeakingConfig = () => {
             {previewAudioUrl && (
               <audio controls src={previewAudioUrl} className="w-full" />
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Speaking Questions</CardTitle>
-            <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm"><Plus className="h-4 w-4 mr-1" />Add Question</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Add Speaking Question</DialogTitle></DialogHeader>
-                <div className="space-y-4 mt-2">
-                  <div className="space-y-2">
-                    <Label>Part</Label>
-                    <Select value={String(newQ.part)} onValueChange={(v) => setNewQ((p) => ({ ...p, part: Number(v) as 1 | 2 | 3 }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">Part 1</SelectItem>
-                        <SelectItem value="2">Part 2</SelectItem>
-                        <SelectItem value="3">Part 3</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Question</Label>
-                    <Textarea value={newQ.question} onChange={(e) => setNewQ((p) => ({ ...p, question: e.target.value }))} />
-                  </div>
-                  {newQ.part === 2 && (
-                    <div className="space-y-2">
-                      <Label>Follow-up Cue Card Points</Label>
-                      <Textarea value={newQ.followUp} onChange={(e) => setNewQ((p) => ({ ...p, followUp: e.target.value }))} />
-                    </div>
-                  )}
-                  <Button className="w-full" onClick={addQuestion} disabled={!newQ.question.trim()}>Add Question</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as '1' | '2' | '3')}>
-              <TabsList>
-                <TabsTrigger value="1">Part 1 ({byPart[1].length})</TabsTrigger>
-                <TabsTrigger value="2">Part 2 ({byPart[2].length})</TabsTrigger>
-                <TabsTrigger value="3">Part 3 ({byPart[3].length})</TabsTrigger>
-              </TabsList>
-              <TabsContent value="1" className="mt-3">{renderQuestions(1)}</TabsContent>
-              <TabsContent value="2" className="mt-3">{renderQuestions(2)}</TabsContent>
-              <TabsContent value="3" className="mt-3">{renderQuestions(3)}</TabsContent>
-            </Tabs>
           </CardContent>
         </Card>
       </div>

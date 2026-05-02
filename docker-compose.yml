@@ -25,6 +25,8 @@ services:
       WHISPER_MODEL_SIZE: "${WHISPER_MODEL_SIZE:-/models/faster-whisper-base.en}"
       WHISPER_DEVICE: "${WHISPER_DEVICE:-cpu}"
       WHISPER_COMPUTE_TYPE: "${WHISPER_COMPUTE_TYPE:-int8}"
+      HF_HOME: "/app/cache/huggingface"
+      XDG_CACHE_HOME: "/app/cache"
       MAX_AUDIO_SECONDS: "${MAX_AUDIO_SECONDS:-120}"
       VAD_MODE: "${VAD_MODE:-2}"
       VAD_SILENCE_FRAMES: "${VAD_SILENCE_FRAMES:-12}"
@@ -37,6 +39,7 @@ services:
     volumes:
       - backend_data:/app/data
       - backend_media:/app/media
+      - backend_cache:/app/cache
       - ./models:/models:ro
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)\""]
@@ -63,3 +66,4 @@ services:
 volumes:
   backend_data:
   backend_media:
+  backend_cache:

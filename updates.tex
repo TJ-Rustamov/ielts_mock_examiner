@@ -1,0 +1,141 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+% Define colors
+\definecolor{darkblue}{RGB}{25, 50, 100}
+\definecolor{lightblue}{RGB}{200, 220, 240}
+\definecolor{accentgreen}{RGB}{76, 175, 80}
+\definecolor{accentred}{RGB}{244, 67, 54}
+
+% Title and header setup
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{\textcolor{darkblue}{\textbf{IELTS Mock Examiner - Weekly Update}}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{2pt}
+\renewcommand{\headrule}{\color{accentgreen}\hrule width\headwidth height\the\headrulewidth \kern-\the\headrulewidth}
+
+% Title formatting
+\titleformat{\section}{\Large\bfseries\color{darkblue}}{}{0pt}{\colorbox{lightblue}{\parbox{\textwidth}{\hspace{0.5em}#1\hspace{0.5em}}}}
+\titleformat{\subsection}{\large\bfseries\color{accentgreen}}{}{0pt}{$\bullet$ #1}
+
+% Set document title
+\title{\huge \textcolor{darkblue}{\textbf{IELTS Mock Examiner}}\\\Large Weekly Development Report\\\small Week of April 15, 2026}
+\author{\textbf{Team Members:} Azlarkhon Khasakhojaev (220263) \& Javlonbek Rustamov (220237)}
+\date{}
+
+\begin{document}
+
+\maketitle
+\vspace{0.5cm}
+
+% ============================================================================
+\section*{COMPLETED THIS WEEK}
+% ============================================================================
+
+\subsection{Backend Infrastructure}
+\begin{itemize}[leftmargin=2em]
+    \item Finalized Django REST Framework API structure with JWT authentication
+    \item Implemented user authentication endpoints (register, login, refresh tokens)
+    \item Configured PostgreSQL database and Django ORM models
+    \item Set up Django Channels for WebSocket support (real-time communication)
+\end{itemize}
+
+\subsection{Writing Module}
+\begin{itemize}[leftmargin=2em]
+    \item Implemented Writing Test models with task types (Task 1, Task 2)
+    \item Created Gemini LLM integration for essay evaluation and feedback
+    \item Built `/api/writing/evaluate/` endpoint with JSON response formatting
+    \item Tested essay evaluation pipeline with sample prompts and essays
+\end{itemize}
+
+\subsection{Speaking Module - WebSocket Infrastructure}
+\begin{itemize}[leftmargin=2em]
+    \item Implemented `SpeakingTestConsumer` with WebSocket connection handling
+    \item Integrated VAD (Voice Activity Detection) for silence detection
+    \item Set up Groq STT (Speech-to-Text) integration for audio transcription
+    \item Implemented Kokoro 82M TTS (Text-to-Speech) for examiner greeting audio
+\end{itemize}
+
+\subsection{Frontend Development}
+\begin{itemize}[leftmargin=2em]
+    \item Built responsive UI with React + Vite + TypeScript
+    \item Implemented authentication pages (login, register)
+    \item Created writing test interface with essay submission form
+    \item Designed WebSocket audio capture component for speaking test
+\end{itemize}
+
+\subsection{DevOps \& Deployment}
+\begin{itemize}[leftmargin=2em]
+    \item Configured Docker and docker-compose for multi-container orchestration
+    \item Set up backend Dockerfile with all Python dependencies
+    \item Set up frontend Dockerfile with Node.js build pipeline
+    \item Verified local development stack (backend + frontend running together)
+\end{itemize}
+
+% ============================================================================
+\vspace{1cm}
+\section*{UPCOMING NEXT WEEK}
+% ============================================================================
+
+\subsection{STT/TTS Model Optimization}
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Faster Whisper S2T Integration}: Evaluate and implement Faster Whisper S2T for improved STT inference speed
+    \item \textbf{Model Optimization}: Profile current model performance and identify bottlenecks
+    \item \textbf{Quantization Testing}: Test quantized versions of speech models for reduced memory footprint
+    \item \textbf{Latency Reduction}: Optimize TTS streaming pipeline with better chunking and buffering strategies
+    \item \textbf{Concurrent Processing}: Implement multi-threaded audio processing for improved throughput
+    \item \textbf{Model Benchmarking}: Create performance comparison report (current vs. optimized models)
+\end{itemize}
+
+\subsection{Speaking Test Enhancement}
+\begin{itemize}[leftmargin=2em]
+    \item Refine VAD sensitivity tuning for more accurate speech boundary detection
+    \item Implement multi-part speaking test flow (Part 1, Part 2, Part 3)
+    \item Add real-time transcript display to user interface
+    \item Improve audio quality preprocessing (noise reduction, normalization)
+\end{itemize}
+
+\subsection{Testing \& Quality Assurance}
+\begin{itemize}[leftmargin=2em]
+    \item Write comprehensive unit tests for all AI service integrations
+    \item Conduct end-to-end testing for writing evaluation pipeline
+    \item Perform WebSocket connection stress testing
+    \item Validate error handling and edge cases
+\end{itemize}
+
+\subsection{Documentation}
+\begin{itemize}[leftmargin=2em]
+    \item Document STT/TTS model optimization results and recommendations
+    \item Update API documentation with all available endpoints
+    \item Create deployment guide for production environment
+    \item Document WebSocket protocol for real-time communication
+\end{itemize}
+
+% ============================================================================
+\vspace{1cm}
+\section*{TECHNICAL NOTES}
+% ============================================================================
+
+\textbf{Current Stack:}
+\begin{itemize}[leftmargin=2em]
+    \item \textbf{Backend}: Django 5.x, Django REST Framework, Django Channels
+    \item \textbf{Frontend}: React 19+, TypeScript, Tailwind CSS, Vite
+    \item \textbf{AI/ML}: Gemini API (LLM), Groq (STT), Kokoro 82M (TTS), WebRTCVAD
+    \item \textbf{Database}: PostgreSQL
+    \item \textbf{DevOps}: Docker, Docker Compose
+\end{itemize}
+
+\textbf{Key Focus Areas:}
+\begin{itemize}[leftmargin=2em]
+    \item Model inference optimization for real-time performance
+    \item Robust WebSocket communication and error handling
+    \item User experience improvements in speaking test interface
+\end{itemize}
+
+\end{document}

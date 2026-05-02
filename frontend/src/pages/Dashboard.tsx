@@ -68,6 +68,7 @@ const Dashboard = () => {
 
   const [writingSessions, setWritingSessions] = useState<SessionCard[]>([]);
   const [speakingSessions, setSpeakingSessions] = useState<SessionCard[]>([]);
+  const [speakingFilter, setSpeakingFilter] = useState<'all' | '1' | '2' | '3'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +103,8 @@ const Dashboard = () => {
             type: item.part === 'all' ? 'All Parts' : `Part ${item.part}`,
             score: toScore(item.scores),
             topic: truncate(item.transcript || 'Speaking test session'),
-          }))
+            rawPart: item.part,
+          })) as (SessionCard & { rawPart: string })[]
         );
       } catch (err) {
         if (!mounted) return;
@@ -118,7 +120,12 @@ const Dashboard = () => {
     };
   }, []);
 
-  const sessions = activeView === 'writing' ? writingSessions : speakingSessions;
+  const filteredSpeakingSessions = useMemo(() => {
+    if (speakingFilter === 'all') return speakingSessions;
+    return speakingSessions.filter(s => (s as any).rawPart === speakingFilter || (s as any).rawPart === 'all');
+  }, [speakingSessions, speakingFilter]);
+
+  const sessions = activeView === 'writing' ? writingSessions : filteredSpeakingSessions;
   const safeScores = sessions.map((s) => s.score).filter((s) => Number.isFinite(s) && s > 0);
   const avgScore = safeScores.length ? (safeScores.reduce((a, s) => a + s, 0) / safeScores.length).toFixed(1) : '0.0';
   const bestScore = safeScores.length ? Math.max(...safeScores).toFixed(1) : '0.0';
@@ -242,15 +249,35 @@ const Dashboard = () => {
           </Card>
         </motion.div>
 
-        <motion.h2
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2"
+          className="flex items-center justify-between mb-4"
         >
-          Recent Sessions
-          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-normal">{sessions.length} total</span>
-        </motion.h2>
+          <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+            Recent Sessions
+            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-normal">{sessions.length} total</span>
+          </h2>
+          
+          {activeView === 'speaking' && (
+            <div className="flex items-center gap-2 text-sm bg-muted/50 p-1 rounded-lg">
+              {(['all', '1', '2', '3'] as const).map(filter => (
+                <button
+                  key={filter}
+                  onClick={() => setSpeakingFilter(filter)}
+                  className={`px-3 py-1 rounded-md transition-colors ${
+                    speakingFilter === filter 
+                      ? 'bg-primary text-primary-foreground shadow-sm' 
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  {filter === 'all' ? 'All' : `Part ${filter}`}
+                </button>
+              ))}
+            </div>
+          )}
+        </motion.div>
 
         {loading && <p className="text-muted-foreground">Loading sessions...</p>}
         {!loading && sessions.length === 0 && <p className="text-muted-foreground">No sessions yet. Start a test to see results here.</p>}

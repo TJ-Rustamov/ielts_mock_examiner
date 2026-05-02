@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Trash2, Settings2, Shield, Server, Save } from 'lucide-react';
+import { User, Trash2, Settings2, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Layout from '@/components/Layout';
 import ProfileAvatar from '@/components/ProfileAvatar';
-import { apiUrl, getBackendBaseUrl, setBackendBaseUrl } from '@/lib/backend';
+import { useToast } from '@/hooks/use-toast';
+import { getAuthToken, getCurrentUser, logoutLocal } from '@/lib/auth';
+import { fetchJson } from '@/lib/backend';
 
 const container = {
   hidden: { opacity: 0 },
@@ -18,23 +20,93 @@ const item = {
 };
 
 const Settings = () => {
-  const [selectedAvatar, setSelectedAvatar] = useState('??');
+  const { toast } = useToast();
+  const token = getAuthToken();
+  const user = getCurrentUser() as any;
+  const logout = () => {
+    logoutLocal();
+    window.location.href = '/';
+  };
+  const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || '??');
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
-  const [backendUrl, setBackendUrl] = useState(getBackendBaseUrl());
-  const [healthStatus, setHealthStatus] = useState<string | null>(null);
 
-  const saveBackendUrl = () => {
-    setBackendBaseUrl(backendUrl);
-    setHealthStatus('Saved backend URL.');
+  const handleUpdateAvatar = async (avatar: string) => {
+    setSelectedAvatar(avatar);
+    setShowAvatarPicker(false);
+    try {
+      await fetchJson('/api/auth/update-avatar', {
+        method: 'POST',
+        body: JSON.stringify({ avatar_url: avatar })
+      });
+      toast({ title: 'Avatar updated successfully' });
+      // Update local storage user data
+      const user = getCurrentUser();
+      if (user) {
+        localStorage.setItem('auth_user', JSON.stringify({ ...user, avatar }));
+      }
+    } catch (e: any) {
+      toast({ title: e.message, variant: 'destructive' });
+    }
   };
 
-  const testBackend = async () => {
+  const [newUsername, setNewUsername] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleUpdateUsername = async () => {
+    if (!newUsername) return toast({ title: 'Username cannot be empty', variant: 'destructive' });
+    setIsUpdatingUsername(true);
     try {
-      const response = await fetch(apiUrl('/api/health'));
-      if (!response.ok) throw new Error('Health check failed');
-      setHealthStatus('Connected to backend.');
-    } catch {
-      setHealthStatus('Could not connect. Check backend URL and server status.');
+      await fetchJson('/api/auth/update-username', {
+        method: 'POST',
+        body: JSON.stringify({ username: newUsername })
+      });
+      toast({ title: 'Username updated! Please re-login.' });
+      setTimeout(logout, 1500);
+    } catch (e: any) {
+      toast({ title: e.message, variant: 'destructive' });
+    } finally {
+      setIsUpdatingUsername(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) return toast({ title: 'Please fill all password fields', variant: 'destructive' });
+    if (newPassword !== confirmPassword) return toast({ title: 'New passwords do not match', variant: 'destructive' });
+    setIsUpdatingPassword(true);
+    try {
+      await fetchJson('/api/auth/update-password', {
+        method: 'POST',
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+      });
+      toast({ title: 'Password updated successfully' });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (e: any) {
+      toast({ title: e.message, variant: 'destructive' });
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!confirm('Are you absolutely sure you want to delete your account? This action cannot be undone.')) return;
+    setIsDeleting(true);
+    try {
+      await fetchJson('/api/auth/delete-account', {
+        method: 'POST',
+      });
+      toast({ title: 'Account deleted' });
+      setTimeout(logout, 1000);
+    } catch (e: any) {
+      toast({ title: e.message, variant: 'destructive' });
+      setIsDeleting(false);
     }
   };
 
@@ -62,10 +134,10 @@ const Settings = () => {
                   <motion.div
                     whileHover={{ scale: 1.1, rotate: 5 }}
                     whileTap={{ scale: 0.95 }}
-                    className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-4xl cursor-pointer hover:bg-primary/20 transition-colors glow-sm"
+                    className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-4xl cursor-pointer hover:bg-primary/20 transition-colors glow-sm overflow-hidden"
                     onClick={() => setShowAvatarPicker(!showAvatarPicker)}
                   >
-                    {selectedAvatar}
+                    {selectedAvatar.length > 10 ? <img src={selectedAvatar} alt="avatar" className="w-full h-full object-cover" /> : selectedAvatar}
                   </motion.div>
                   <Button variant="outline" onClick={() => setShowAvatarPicker(!showAvatarPicker)}>
                     Change Avatar
@@ -73,29 +145,13 @@ const Settings = () => {
                 </div>
                 {showAvatarPicker && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                    <ProfileAvatar selected={selectedAvatar} onSelect={(a) => { setSelectedAvatar(a); setShowAvatarPicker(false); }} />
+                    <ProfileAvatar selected={selectedAvatar} onSelect={handleUpdateAvatar} />
                   </motion.div>
                 )}
               </CardContent>
             </Card>
           </motion.div>
 
-          <motion.div variants={item}>
-            <Card className="mb-6 hover:glow-sm transition-shadow">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2"><Server className="h-5 w-5 text-primary" /> Backend URL</CardTitle>
-                <CardDescription>Set your backend host (example: http://localhost:8000)</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Input value={backendUrl} onChange={(e) => setBackendUrl(e.target.value)} placeholder="http://localhost:8000" />
-                <div className="flex gap-2">
-                  <Button className="gap-2 glow-sm" onClick={saveBackendUrl}><Save className="h-4 w-4" /> Save</Button>
-                  <Button variant="outline" onClick={testBackend}>Test Connection</Button>
-                </div>
-                {healthStatus && <p className="text-sm text-muted-foreground">{healthStatus}</p>}
-              </CardContent>
-            </Card>
-          </motion.div>
 
           <motion.div variants={item}>
             <Card className="mb-6 hover:glow-sm transition-shadow">
@@ -103,8 +159,10 @@ const Settings = () => {
                 <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" /> Username</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input placeholder="New username" />
-                <Button className="glow-sm">Update Username</Button>
+                <Input placeholder="New username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} />
+                <Button className="glow-sm" onClick={handleUpdateUsername} disabled={isUpdatingUsername}>
+                  {isUpdatingUsername ? 'Updating...' : 'Update Username'}
+                </Button>
               </CardContent>
             </Card>
           </motion.div>
@@ -115,10 +173,12 @@ const Settings = () => {
                 <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5 text-primary" /> Change Password</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input type="password" placeholder="Current password" />
-                <Input type="password" placeholder="New password" />
-                <Input type="password" placeholder="Confirm new password" />
-                <Button className="glow-sm">Update Password</Button>
+                <Input type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                <Input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                <Input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                <Button className="glow-sm" onClick={handleUpdatePassword} disabled={isUpdatingPassword}>
+                  {isUpdatingPassword ? 'Updating...' : 'Update Password'}
+                </Button>
               </CardContent>
             </Card>
           </motion.div>
@@ -131,7 +191,9 @@ const Settings = () => {
                 <CardDescription>Permanently delete your account and all data</CardDescription>
               </CardHeader>
               <CardContent className="relative z-10">
-                <Button variant="destructive">Delete Account</Button>
+                <Button variant="destructive" onClick={handleDeleteAccount} disabled={isDeleting}>
+                  {isDeleting ? 'Deleting...' : 'Delete Account'}
+                </Button>
               </CardContent>
             </Card>
           </motion.div>

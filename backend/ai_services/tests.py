@@ -70,6 +70,11 @@ class TTSClientTests(SimpleTestCase):
         audio = KokoroClient().generate_audio("Hello there")
         self.assertTrue(audio.startswith(b"RIFF"))
 
+    def test_stream_audio_chunks_returns_wav_chunks(self):
+        chunks = list(KokoroClient().stream_audio_chunks("Hello there. How are you today?"))
+        self.assertGreaterEqual(len(chunks), 1)
+        self.assertTrue(chunks[0].startswith(b"RIFF"))
+
 
 class VADServiceTests(SimpleTestCase):
     def test_detect_end_of_speech_after_silence(self):

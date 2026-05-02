@@ -19,7 +19,8 @@ import WritingTopics from "./pages/admin/WritingTopics";
 import UserManagement from "./pages/admin/UserManagement";
 import AIConfiguration from "./pages/admin/AIConfiguration";
 import SpeakingConfig from "./pages/admin/SpeakingConfig";
-import { isAdminUser, isAuthenticated } from "./lib/auth";
+import SpeakingQuestions from "./pages/admin/SpeakingQuestions";
+import { getPostAuthRedirectPath, isAdminUser, isAuthenticated } from "./lib/auth";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,13 @@ const RequireAdmin = ({ children }: { children: JSX.Element }) => {
   return children;
 };
 
+const AuthOnly = ({ children }: { children: JSX.Element }) => {
+  if (isAuthenticated()) {
+    return <Navigate to={getPostAuthRedirectPath()} replace />;
+  }
+  return children;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
@@ -48,7 +56,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/auth" element={<Auth />} />
+            <Route path="/auth" element={<AuthOnly><Auth /></AuthOnly>} />
             <Route path="/" element={<RequireAuth><Dashboard /></RequireAuth>} />
             <Route path="/writing" element={<RequireAuth><Writing /></RequireAuth>} />
             <Route path="/speaking" element={<RequireAuth><Speaking /></RequireAuth>} />
@@ -62,6 +70,7 @@ const App = () => (
             <Route path="/admin/users" element={<RequireAdmin><UserManagement /></RequireAdmin>} />
             <Route path="/admin/ai-config" element={<RequireAdmin><AIConfiguration /></RequireAdmin>} />
             <Route path="/admin/speaking-config" element={<RequireAdmin><SpeakingConfig /></RequireAdmin>} />
+            <Route path="/admin/speaking-questions" element={<RequireAdmin><SpeakingQuestions /></RequireAdmin>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

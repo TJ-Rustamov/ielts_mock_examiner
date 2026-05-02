@@ -14,6 +14,11 @@ class WritingEvaluation(models.Model):
     scores = models.JSONField(default=dict)
     examiner_comments = models.TextField(blank=True)
     corrections = models.JSONField(default=list)
+    criteria_feedback = models.JSONField(default=dict)
+    inline_suggestions = models.JSONField(default=list)
+    band_essays = models.JSONField(default=dict)
+    band_essays_status = models.CharField(max_length=20, default="pending")
+    band_essays_error = models.TextField(blank=True)
     word_count = models.PositiveIntegerField(default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)

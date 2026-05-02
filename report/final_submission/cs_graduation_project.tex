@@ -1,0 +1,122 @@
+﻿\documentclass[conference]{IEEEtran}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\begin{document}
+
+\title{IELTS Mock Examiner: A Full-Stack AI-Assisted Platform for Writing and Speaking Practice}
+
+\author{
+    \IEEEauthorblockN{Azlarkhon Khasakhojaev}
+    \IEEEauthorblockA{Central Asian University\\Engineering School\\Department of Computer Science\\Student ID: 220263}
+    \and
+    \IEEEauthorblockN{Javlonbek Rustamov}
+    \IEEEauthorblockA{Central Asian University\\Engineering School\\Department of Computer Science\\Student ID: 220237}
+    \and
+    \IEEEauthorblockN{Supervisor: [To Be Confirmed]}
+    \IEEEauthorblockA{Central Asian University\\Engineering School\\Department of Computer Science\\Email: [To Be Confirmed]}
+}
+
+\maketitle
+
+\begin{abstract}
+This project presents IELTS Mock Examiner, a full-stack web platform that helps learners practice IELTS Writing and Speaking tasks with AI-assisted evaluation and interaction. The system combines a Django backend API with a React frontend and supports both standard REST workflows and real-time speaking sessions. Writing tasks are evaluated through a Gemini-based service, while speaking sessions use a streaming flow that includes voice activity detection, speech-to-text, and text-to-speech components. The backend organizes functionality into modular apps for authentication, writing, speaking, and core health/configuration services. The deployment architecture uses Docker Compose to run backend and frontend services together, with health checks and environment-driven configuration for reproducibility. The implementation focuses on practical usability, modular design, and integration of AI services in an educational setting. The resulting platform provides a foundation for structured IELTS practice and future extension toward richer analytics and adaptive feedback.
+\end{abstract}
+
+\begin{IEEEkeywords}
+IELTS, AI in Education, Django, React, Speech Processing, Writing Evaluation.
+\end{IEEEkeywords}
+
+\section{Introduction}
+IELTS preparation requires repeated writing and speaking practice with timely and structured feedback. Manual evaluation is time-consuming and often unavailable to many students on demand. This project addresses that gap by building a web platform that combines automated writing feedback and interactive speaking practice in one system.
+
+The developed platform, IELTS Mock Examiner, allows users to authenticate, submit essays for task-based evaluation, and complete speaking practice using audio interaction. The system is designed to be practical for student use and maintainable for iterative academic development.
+
+\subsection{Problem Statement}
+Students preparing for IELTS often lack consistent access to immediate, structured, and criterion-oriented feedback for Writing and Speaking. Existing practice workflows are fragmented across tools and are not always aligned with an integrated learning process.
+
+\subsection{Objectives}
+The main objective is to design and implement a full-stack IELTS practice platform with AI-assisted modules. Specific objectives are:
+\begin{itemize}
+    \item Develop a modular backend API for authentication, writing, and speaking workflows.
+    \item Implement a writing evaluation pipeline using a configurable Gemini model.
+    \item Implement a speaking pipeline using VAD, STT, and TTS components.
+    \item Build a responsive frontend for user interaction with writing and speaking modules.
+    \item Containerize services with Docker Compose for reproducible local deployment.
+\end{itemize}
+
+\section{Methods}
+\subsection{System Architecture}
+The system follows a client-server architecture. The frontend is implemented with React, Vite, and TypeScript. The backend is implemented with Django, Django REST Framework, and Django Channels. The backend exposes endpoints under `/api/`, including modules for core, authentication, writing, and speaking.
+
+Persistent storage is configured with SQLite in the current implementation through environment variable `SQLITE_PATH`. Media and cache directories are mounted in Docker for runtime assets and model caches.
+
+\subsection{Implementation Approach}
+Development uses modular application separation in the backend:
+\begin{itemize}
+    \item `accounts`: authentication endpoints and token-based access.
+    \item `writing`: writing tasks and evaluation flow.
+    \item `speaking_app`: speaking session logic and realtime interaction.
+    \item `ai_services`: integrations for Gemini, STT, TTS, and VAD utilities.
+    \item `core`: health and base API functionality.
+\end{itemize}
+
+The speaking flow relies on audio segmentation with configurable VAD parameters and time limits. The writing flow uses prompt templates and AI service calls to provide structured feedback.
+
+\subsection{Technology Stack}
+\textbf{Backend:} Python, Django, Django REST Framework, Django Channels.\\
+\textbf{Frontend:} React, Vite, TypeScript, Tailwind CSS, shadcn/ui components.\\
+\textbf{AI Services:} Gemini model configuration, Faster-Whisper STT model path configuration, Kokoro TTS model path configuration, and VAD-based segmentation.\\
+\textbf{DevOps:} Docker and Docker Compose with health checks and service dependency control.
+
+\section{Results}
+\subsection{Functional Outputs}
+The implemented system provides:
+\begin{itemize}
+    \item User authentication and session-oriented access to practice modules.
+    \item Writing submission and AI-based evaluation endpoints.
+    \item Speaking endpoints and realtime interaction infrastructure.
+    \item Frontend pages for authentication, dashboard, writing, speaking, and administration.
+\end{itemize}
+
+\subsection{System Integration Outcomes}
+Integration testing at the service level confirms that backend and frontend can run together via Docker Compose using ports 8000 and 5173, with backend health-check validation before frontend dependency startup. Environment-based configuration supports controlled model and runtime parameter adjustments.
+
+\subsection{Current Validation Scope}
+At the current project stage, validation primarily confirms feature availability and end-to-end service connectivity. The platform is ready for extended experimental evaluation such as latency benchmarking, scoring consistency analysis, and user acceptance testing.
+
+\section{Discussion}
+The project demonstrates that an integrated IELTS practice system can be built with a modular web architecture and configurable AI services. A key strength is separation of concerns across backend apps and frontend pages, which simplifies maintenance and extension.
+
+The current limitations include the absence of formal large-scale user testing and benchmark reporting in this version of the report. In addition, model output quality may vary depending on prompt design and runtime configuration.
+
+Despite these limitations, the system establishes a solid technical baseline for incremental improvements in evaluation accuracy, speaking interaction smoothness, and pedagogical feedback quality.
+
+\section{Conclusion}
+IELTS Mock Examiner successfully implements a full-stack educational platform for writing and speaking practice with AI-assisted processing. The backend, frontend, and containerized deployment are functionally integrated and aligned with the project objectives.
+
+Future work includes rubric-level quantitative evaluation, richer analytics dashboards, expanded speaking session orchestration, and comparative testing of model configurations for quality and performance.
+
+\begin{thebibliography}{9}
+\bibitem{django}
+Django Software Foundation, "Django Documentation," https://docs.djangoproject.com/.
+
+\bibitem{drf}
+Encode OSS, "Django REST Framework Documentation," https://www.django-rest-framework.org/.
+
+\bibitem{react}
+Meta, "React Documentation," https://react.dev/.
+
+\bibitem{vite}
+Vite Team, "Vite Documentation," https://vite.dev/.
+
+\bibitem{channels}
+Django Channels Contributors, "Channels Documentation," https://channels.readthedocs.io/.
+\end{thebibliography}
+
+\end{document}

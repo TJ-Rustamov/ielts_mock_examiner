@@ -17,6 +17,52 @@ class IsStaffOrSuperuser(BasePermission):
         return bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
 
 
+def _safe_json_list(value):
+    return value if isinstance(value, list) else []
+
+
+def _safe_json_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def _normalize_band_entry(value):
+    if isinstance(value, str):
+        return {"rewritten_essay": value, "coach_summary": "", "improvements": []}
+    if not isinstance(value, dict):
+        return {"rewritten_essay": "", "coach_summary": "", "improvements": []}
+
+    rewritten = str(value.get("rewritten_essay", "")).strip()
+    coach_summary = str(value.get("coach_summary", "")).strip()
+    improvements_raw = value.get("improvements", [])
+    improvements = []
+    if isinstance(improvements_raw, list):
+        for item in improvements_raw[:12]:
+            if not isinstance(item, dict):
+                continue
+            enhanced_text = str(item.get("enhanced_text", "")).strip()
+            why_better = str(item.get("why_better", "")).strip()
+            if not enhanced_text and not why_better:
+                continue
+            improvements.append(
+                {
+                    "original_text": str(item.get("original_text", "")).strip(),
+                    "enhanced_text": enhanced_text,
+                    "why_better": why_better,
+                    "criterion": str(item.get("criterion", "")).strip().lower(),
+                }
+            )
+    return {"rewritten_essay": rewritten, "coach_summary": coach_summary, "improvements": improvements}
+
+
+def _normalize_band_essays_dict(value):
+    source = value if isinstance(value, dict) else {}
+    return {
+        "7": _normalize_band_entry(source.get("7")),
+        "8": _normalize_band_entry(source.get("8")),
+        "9": _normalize_band_entry(source.get("9")),
+    }
+
+
 class WritingEvaluateAPIView(APIView):
     permission_classes = [IsAuthenticated]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
@@ -90,8 +136,12 @@ class WritingEvaluateAPIView(APIView):
             topic_image_url=topic_image_url,
             scores=normalized_scores,
             examiner_comments=result.get("examiner_comments", ""),
-            corrections=result.get("corrections", []),
+            corrections=_safe_json_list(result.get("corrections", [])),
+            criteria_feedback=_safe_json_dict(result.get("criteria_feedback")),
+            inline_suggestions=_safe_json_list(result.get("inline_suggestions", [])),
             word_count=int(result.get("word_count", 0)),
+            band_essays={},
+            band_essays_status="pending",
         )
 
         return Response(
@@ -101,7 +151,10 @@ class WritingEvaluateAPIView(APIView):
                 "scores": evaluation.scores,
                 "examiner_comments": evaluation.examiner_comments,
                 "corrections": evaluation.corrections,
+                "criteria_feedback": evaluation.criteria_feedback,
+                "inline_suggestions": evaluation.inline_suggestions,
                 "word_count": evaluation.word_count,
+                "band_essays_status": evaluation.band_essays_status,
                 "created_at": evaluation.created_at,
             },
             status=status.HTTP_201_CREATED,
@@ -126,7 +179,10 @@ class WritingEvaluationDetailAPIView(APIView):
                 "scores": evaluation.scores,
                 "examiner_comments": evaluation.examiner_comments,
                 "corrections": evaluation.corrections,
+                "criteria_feedback": evaluation.criteria_feedback,
+                "inline_suggestions": evaluation.inline_suggestions,
                 "word_count": evaluation.word_count,
+                "band_essays_status": evaluation.band_essays_status,
                 "created_at": evaluation.created_at,
             }
         )
@@ -149,6 +205,90 @@ class WritingEvaluationListAPIView(APIView):
             for item in evaluations
         ]
         return Response({"results": items})
+
+
+class WritingBandEssaysStatusAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, evaluation_id: int):
+        try:
+            evaluation = WritingEvaluation.objects.get(id=evaluation_id, author=request.user)
+        except WritingEvaluation.DoesNotExist:
+            return Response({"error": "not_found"}, status=status.HTTP_404_NOT_FOUND)
+
+        essays = _normalize_band_essays_dict(evaluation.band_essays)
+        generated = [band for band, item in essays.items() if item.get("rewritten_essay")]
+        return Response(
+            {
+                "status": evaluation.band_essays_status,
+                "essays": essays,
+                "generated_bands": generated,
+                "error": evaluation.band_essays_error or "",
+            }
+        )
+
+    def post(self, request, evaluation_id: int):
+        try:
+            evaluation = WritingEvaluation.objects.get(id=evaluation_id, author=request.user)
+        except WritingEvaluation.DoesNotExist:
+            return Response({"error": "not_found"}, status=status.HTTP_404_NOT_FOUND)
+
+        band = str(request.data.get("band", "")).strip()
+        if band not in {"7", "8", "9"}:
+            return Response({"error": "invalid_band", "message": "band must be one of 7, 8, 9"}, status=status.HTTP_400_BAD_REQUEST)
+
+        force = bool(request.data.get("force", False))
+        existing = _normalize_band_essays_dict(evaluation.band_essays)
+        if not force and existing.get(band, {}).get("rewritten_essay"):
+            generated = [b for b, item in existing.items() if item.get("rewritten_essay")]
+            return Response(
+                {
+                    "status": evaluation.band_essays_status,
+                    "essays": existing,
+                    "generated_bands": generated,
+                    "error": evaluation.band_essays_error or "",
+                }
+            )
+
+        evaluation.band_essays_status = "processing"
+        evaluation.band_essays_error = ""
+        evaluation.save(update_fields=["band_essays_status", "band_essays_error"])
+
+        try:
+            gemini = GeminiClient()
+            generated_entry = gemini.generate_band_rewrite(
+                task_type=evaluation.task_type,
+                prompt=evaluation.prompt,
+                essay=evaluation.essay_text,
+                target_band=int(band),
+            )
+            existing[band] = _normalize_band_entry(generated_entry)
+            generated = [b for b, item in existing.items() if item.get("rewritten_essay")]
+            evaluation.band_essays = existing
+            evaluation.band_essays_status = "done" if generated else "pending"
+            evaluation.band_essays_error = ""
+            evaluation.save(update_fields=["band_essays", "band_essays_status", "band_essays_error"])
+            return Response(
+                {
+                    "status": evaluation.band_essays_status,
+                    "essays": existing,
+                    "generated_bands": generated,
+                    "error": "",
+                }
+            )
+        except Exception as exc:
+            evaluation.band_essays_status = "failed"
+            evaluation.band_essays_error = str(exc)
+            evaluation.save(update_fields=["band_essays_status", "band_essays_error"])
+            return Response(
+                {
+                    "status": "failed",
+                    "essays": existing,
+                    "generated_bands": [b for b, item in existing.items() if item.get("rewritten_essay")],
+                    "error": str(exc),
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
 
 class WritingTopicImageUploadAPIView(APIView):

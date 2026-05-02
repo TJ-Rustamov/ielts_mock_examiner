@@ -12,6 +12,7 @@ const adminNavItems = [
   { id: 'users', label: 'User Management', icon: Users, path: '/admin/users' },
   { id: 'ai', label: 'AI Configuration', icon: Bot, path: '/admin/ai-config' },
   { id: 'speaking', label: 'Speaking Config', icon: Mic, path: '/admin/speaking-config' },
+  { id: 'speaking_questions', label: 'Speaking Questions', icon: Mic, path: '/admin/speaking-questions' },
 ];
 
 const AdminSidebar = () => {
@@ -20,11 +21,9 @@ const AdminSidebar = () => {
 
   return (
     <aside className="w-64 min-h-screen bg-card border-r border-border flex flex-col">
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-primary" />
-          <span className="font-heading font-bold text-lg text-foreground">Admin Panel</span>
-        </div>
+      <div className="p-6 border-b border-border text-center">
+        <img src="/logo.png" alt="Logo" className="w-32 h-auto mx-auto mb-3 drop-shadow-md" />
+        <span className="font-heading font-bold text-xl text-foreground block">Admin Panel</span>
         <p className="text-xs text-muted-foreground mt-1">Manage your IELTS platform</p>
       </div>
 

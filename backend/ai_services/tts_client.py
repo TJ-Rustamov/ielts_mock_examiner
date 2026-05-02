@@ -4,6 +4,7 @@ import os
 import struct
 import wave
 from functools import cached_property
+from typing import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -139,6 +140,22 @@ class KokoroClient:
             return audio_bytes.getvalue()
         except Exception:
             return self._fallback_tone(text)
+
+    def stream_audio_chunks(self, text: str, voice: str | None = None, speed: float | None = None) -> Iterator[bytes]:
+        cleaned = " ".join((text or "").split()).strip()
+        if not cleaned:
+            yield self._fallback_tone(".")
+            return
+
+        pieces = self._split_text(cleaned)
+        if not pieces:
+            yield self._fallback_tone(cleaned)
+            return
+
+        for piece in pieces:
+            chunk = self.generate_audio(piece, voice=voice, speed=speed)
+            if chunk:
+                yield chunk
 
     def _split_text(self, text: str, max_chars: int = 260) -> list[str]:
         cleaned = " ".join(text.split())
