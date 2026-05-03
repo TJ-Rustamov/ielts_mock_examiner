@@ -10,6 +10,7 @@
 !/frontend/
 !/models/
 !/q2_tests.json
+!/poster/
 
 # Globally ignore OS and editor files
 .DS_Store
