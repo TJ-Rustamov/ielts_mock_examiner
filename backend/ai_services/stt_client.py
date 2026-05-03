@@ -5,6 +5,7 @@ import tempfile
 import wave
 from functools import cached_property
 
+import numpy as np
 from faster_whisper import WhisperModel
 
 
@@ -13,6 +14,22 @@ class FasterWhisperClient:
         self.model_size = os.getenv("WHISPER_MODEL_SIZE", "base")
         self.device = os.getenv("WHISPER_DEVICE", "cpu")
         self.compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
+        self._prewarm()
+
+    def _prewarm(self):
+        try:
+            dummy_audio = np.zeros(8000, dtype=np.float32)
+            list(self.model.transcribe(
+                dummy_audio,
+                beam_size=1,
+                language="en",
+                condition_on_previous_text=False,
+                vad_filter=False,
+                without_timestamps=True,
+            ))
+            print("[STT] Model pre-warmed.")
+        except Exception as e:
+            print(f"[STT] Pre-warm failed: {e}")
 
     def _normalize_model_source(self) -> str:
         source = str(self.model_size or "base").strip()
@@ -42,7 +59,13 @@ class FasterWhisperClient:
     def model(self) -> WhisperModel:
         model_source = self._normalize_model_source()
         try:
-            return WhisperModel(model_source, device=self.device, compute_type=self.compute_type)
+            return WhisperModel(
+                model_source,
+                device=self.device,
+                compute_type=self.compute_type,
+                cpu_threads=0,
+                num_workers=1
+            )
         except Exception as exc:
             raise RuntimeError(
                 "Failed to initialize Whisper model from WHISPER_MODEL_SIZE="
@@ -60,7 +83,14 @@ class FasterWhisperClient:
             temp_path = temp_file.name
 
         try:
-            segments, _ = self.model.transcribe(temp_path, beam_size=1)
+            segments, _ = self.model.transcribe(
+                temp_path,
+                beam_size=1,
+                language="en",
+                condition_on_previous_text=False,
+                vad_filter=False,
+                without_timestamps=True,
+            )
             text_parts = [segment.text.strip() for segment in segments if segment.text.strip()]
             return " ".join(text_parts)
         finally:
@@ -72,15 +102,40 @@ class FasterWhisperClient:
     def transcribe_stream_buffer(self, stream: io.BytesIO, file_extension: str = ".wav") -> str:
         return self.transcribe_audio_bytes(stream.getvalue(), file_extension=file_extension)
 
+    def _trim_trailing_silence(self, audio: np.ndarray, sample_rate: int = 16000, threshold: float = 0.01) -> np.ndarray:
+        above = np.where(np.abs(audio) > threshold)[0]
+        if len(above) == 0:
+            return audio
+        last_speech = above[-1]
+        cutoff = min(len(audio), last_speech + int(sample_rate * 0.15))
+        return audio[:cutoff]
+
     def transcribe_pcm16_bytes(self, pcm_bytes: bytes, sample_rate: int = 16000) -> str:
         if not pcm_bytes:
             return ""
 
-        wav_io = io.BytesIO()
-        with wave.open(wav_io, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(sample_rate)
-            wav_file.writeframes(pcm_bytes)
+        try:
+            pcm_data = np.frombuffer(pcm_bytes, dtype=np.int16)
+            audio_array = pcm_data.astype(np.float32) / 32768.0
+            audio_array = self._trim_trailing_silence(audio_array, sample_rate)
+            
+            segments, _ = self.model.transcribe(
+                audio_array,
+                beam_size=1,
+                language="en",
+                condition_on_previous_text=False,
+                vad_filter=False,
+                without_timestamps=True,
+            )
+            text_parts = [segment.text.strip() for segment in segments if segment.text.strip()]
+            return " ".join(text_parts)
+        except Exception:
+            # Fallback in case of buffer size issues or if model requires file format
+            wav_io = io.BytesIO()
+            with wave.open(wav_io, "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(sample_rate)
+                wav_file.writeframes(pcm_bytes)
 
-        return self.transcribe_audio_bytes(wav_io.getvalue(), file_extension=".wav")
+            return self.transcribe_audio_bytes(wav_io.getvalue(), file_extension=".wav")

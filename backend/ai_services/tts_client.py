@@ -11,6 +11,9 @@ import numpy as np
 import soundfile as sf
 
 
+_GLOBAL_PIPELINE = None
+_GLOBAL_PIPELINE_LOADED = False
+
 class KokoroClient:
     """Generate WAV bytes from Kokoro model. Falls back to a tone when runtime fails."""
 
@@ -21,7 +24,7 @@ class KokoroClient:
         self.device = os.getenv("KOKORO_DEVICE", "cpu")
         self.repo_id = os.getenv("KOKORO_REPO_ID", "hexgrad/Kokoro-82M")
         self.repo_dir = str(Path(self.model_path).parent) if self.model_path.endswith(".pth") else self.model_path
-        self.speed = 1.0
+        self.speed = 1.05
 
         # Allow admin-configured voice/speed override when DB is available.
         try:
@@ -30,9 +33,12 @@ class KokoroClient:
             cfg = SpeakingConfiguration.objects.first()
             if cfg:
                 self.voice = cfg.voice or self.voice
-                self.speed = float(cfg.speed or 1.0)
+                self.speed = float(cfg.speed or 1.05)
         except Exception:
             pass
+            
+        # Trigger global load if not done
+        _ = self.pipeline
 
     def _resolve_voice(self, value: str | None = None) -> str:
         voice_name = (value or self.voice or "").strip()
@@ -69,10 +75,16 @@ class KokoroClient:
         stretched = np.interp(target_x, source_x, source).astype(np.float32)
         return stretched
 
-    @cached_property
+    @property
     def pipeline(self):
+        global _GLOBAL_PIPELINE, _GLOBAL_PIPELINE_LOADED
+        if _GLOBAL_PIPELINE_LOADED:
+            return _GLOBAL_PIPELINE
+            
+        _GLOBAL_PIPELINE_LOADED = True
         if not self.model_path:
             return None
+            
         try:
             from kokoro import KPipeline
             from kokoro.model import KModel
@@ -83,13 +95,23 @@ class KokoroClient:
 
             model = KModel(config=config_path, model=self.model_path).to(self.device).eval()
 
-            return KPipeline(
+            _GLOBAL_PIPELINE = KPipeline(
                 lang_code=self.lang_code,
                 repo_id=self.repo_id,
                 model=model,
                 device=self.device,
             )
-        except Exception:
+            
+            # Pre-warm immediately after loading globally
+            try:
+                list(_GLOBAL_PIPELINE("Hello.", voice=self._resolve_voice(), speed=self.speed))
+                print("[TTS] Global model loaded and pre-warmed.")
+            except Exception as e:
+                print(f"[TTS] Global pre-warm failed: {e}")
+                
+            return _GLOBAL_PIPELINE
+        except Exception as e:
+            print(f"[TTS] Global load failed: {e}")
             return None
 
     def generate_audio(self, text: str, voice: str | None = None, speed: float | None = None) -> bytes:

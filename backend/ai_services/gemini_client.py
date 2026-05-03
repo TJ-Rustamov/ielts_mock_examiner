@@ -686,6 +686,9 @@ Conversation:
         self._ensure_client()
         system_prompt = self._get_speaking_prompt(part)
         
+        # Inject the latency optimization constraint
+        system_prompt += "\n\nIMPORTANT: Always begin your response with a single short sentence of 8 words or fewer. This should be a direct acknowledgment or conversational opener. Then continue with your full response."
+        
         if forced_question:
             system_prompt += f"\n\nCRITICAL INSTRUCTION FOR THIS TURN:\n{forced_question}"
             

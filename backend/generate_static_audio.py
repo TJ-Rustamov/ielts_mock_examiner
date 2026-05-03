@@ -14,7 +14,7 @@ def main():
     
     phrases = {
         "greeting.wav": "Hi. I am your AI mock IELTS examiner and I will be conducting your test. To start could you please tell me about yourself?",
-        "greeting_part1.wav": "Good day. I am your AI mock IELTS examiner for today. We will now conduct Part 1 of the speaking test. Could you please tell me your full name?",
+        "greeting_part1.wav": "Good day. I am your AI mock IELTS examiner for today. We will now conduct Part 1 of the speaking test. Could you please tell me about yourself?",
         "greeting_part2.wav": "Good day. I am your AI mock IELTS examiner for today. We will now conduct Part 2 of the speaking test. Let's begin.",
         "greeting_part3.wav": "Good day. I am your AI mock IELTS examiner for today. We will now begin Part 3 of the speaking test.",
         "prep_instructions.wav": "You will have 1 minute to prepare your answer, and then you will have 1 to 2 minutes to speak. Your preparation time starts now.",

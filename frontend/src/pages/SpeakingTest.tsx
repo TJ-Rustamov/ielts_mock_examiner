@@ -46,6 +46,20 @@ const float32ToPcm16 = (input: Float32Array): ArrayBuffer => {
   return output.buffer;
 };
 
+const trimTrailingSilence = (buffer: AudioBuffer, thresholdDb: number = -45): number => {
+  const data = buffer.getChannelData(0);
+  const threshold = Math.pow(10, thresholdDb / 20); // convert dB to linear
+  
+  let lastActiveIdx = data.length - 1;
+  while (lastActiveIdx > 0 && Math.abs(data[lastActiveIdx]) < threshold) {
+    lastActiveIdx--;
+  }
+  
+  // Add 30ms grace after last active sample
+  const graceSamples = Math.floor(buffer.sampleRate * 0.03);
+  return Math.min(data.length, lastActiveIdx + graceSamples) / buffer.sampleRate;
+};
+
 const CollapsibleMessage = ({ text }: { text: string }) => {
   const [expanded, setExpanded] = useState(false);
   const isPart2Eval = text.startsWith('[Part 2 evaluated]');
@@ -413,9 +427,8 @@ const SpeakingTest = () => {
         
         source.start(startTime);
         
-        // Slightly overlap chunks to eliminate natural silence padding introduced by TTS at the end of sentences
-        const overlap = 0.08; 
-        nextPlaybackTimeRef.current = startTime + Math.max(0, audioBuffer.duration - overlap);
+        const effectiveDuration = trimTrailingSilence(audioBuffer);
+        nextPlaybackTimeRef.current = startTime + effectiveDuration;
 
         return new Promise<void>((resolve) => {
           source.onended = () => {
@@ -428,8 +441,14 @@ const SpeakingTest = () => {
           };
         });
       } catch (err) {
-        console.error("Audio playback error", err);
+        console.error("[Audio] Chunk decode failed, skipping:", err);
+        // Don't re-throw — let the chain continue with the next chunk
+        if (isLast) sendPlaybackDone(chunkId);
       }
+    }).catch((err) => {
+      // Catch any unhandled rejection to prevent chain death
+      console.error('[Audio] Playback chain error, recovering:', err);
+      playbackQueueRef.current = Promise.resolve(); // reset chain
     });
   };
 

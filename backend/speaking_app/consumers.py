@@ -3,6 +3,7 @@ import base64
 from datetime import timedelta
 import os
 import json
+import re
 from io import BytesIO
 from uuid import uuid4
 
@@ -301,7 +302,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             greeting = "Hi. I am your AI mock IELTS examiner and I will be conducting your test. To start could you please tell me about yourself?"
             greeting_audio_file = "greeting.wav"
         elif part == "1":
-            greeting = "Good day. I am your AI mock IELTS examiner for today. We will now conduct Part 1 of the speaking test. Could you please tell me your full name?"
+            greeting = "Good day. I am your AI mock IELTS examiner for today. We will now conduct Part 1 of the speaking test. Could you please tell me about yourself?"
             greeting_audio_file = "greeting_part1.wav"
         elif part == "2":
             greeting = "Good day. I am your AI mock IELTS examiner for today. We will now conduct Part 2 of the speaking test. Let's begin."
@@ -528,20 +529,16 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         if self.part2_state == "speaking_active":
             should_transcribe = force_transcribe  # Never transcribe on silence in Part 2 speaking, wait for timer/button
         else:
-            dynamic_threshold_s = 2.0
-            if audio_sec > 0.5:
-                 # Just an approximation, we do full transcribe on silence trigger.
-                 pass
+            speech_ms = self.user_speech_duration_ms
+            if speech_ms < 1500:
+                dynamic_threshold_s = 1.3  # Very patient for short utterances (e.g. "um...")
+            elif speech_ms < 4000:
+                dynamic_threshold_s = 1.0  # Medium patience
+            else:
+                dynamic_threshold_s = 0.8  # Still fairly patient for long speeches to allow gathering thoughts
 
-            if self.silence_timer_ms > 0:
-                # Re-evaluate transcript to adjust threshold if we haven't yet
-                if not self.current_partial_transcript and raw_audio_len > 0:
-                    pass # in a real system we'd do a quick partial STT here
-                
-                dynamic_threshold_s = self._calculate_dynamic_silence_threshold(self.current_partial_transcript)
-                
-                if self.silence_timer_ms >= (dynamic_threshold_s * 1000):
-                    should_transcribe = True
+            if self.silence_timer_ms >= (dynamic_threshold_s * 1000):
+                should_transcribe = True
 
         if not should_transcribe:
             return
@@ -872,9 +869,13 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         chunk_id = f"{self.session_id}:{uuid4().hex}"
         self.pending_playback_chunk_id = chunk_id
         
+        # Trim history to prevent unlimited growth (4 turns = 8 messages max)
+        MAX_HISTORY = 8
+        trimmed_history = history_for_gen[-MAX_HISTORY:] if len(history_for_gen) > MAX_HISTORY else history_for_gen
+
         # We start the stream from Gemini
         generator = self.gemini_client.generate_speaking_turn_stream(
-            history_for_gen, 
+            trimmed_history, 
             part=part, 
             forced_question=forced_q_text
         )
@@ -902,6 +903,21 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
 
         self.interrupted_remaining_text = ""
         _collected_unsent = False
+        
+        # Create a queue and a worker for parallel TTS generation
+        tts_queue = asyncio.Queue()
+        async def tts_worker():
+            while True:
+                item = await tts_queue.get()
+                if item is None:
+                    tts_queue.task_done()
+                    break
+                sentence, current_seq, current_chunk_id, is_final_chunk = item
+                if not self.interrupt_requested:
+                    await self._synthesize_and_send_sentence(sentence, current_seq, current_chunk_id, is_final_chunk)
+                tts_queue.task_done()
+                
+        tts_task = asyncio.create_task(tts_worker())
         
         while True:
             chunk = await sync_to_async(_next_text_chunk, thread_sensitive=True)()
@@ -955,23 +971,33 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                 })
 
             # Look for sentences to synthesize
-            sentences = buffer.replace("?", ".").replace("!", ".").split(".")
-            if len(sentences) > 1:
+            chunks = re.split(r'(?<=[.!?])\s+', buffer)
+            if len(chunks) == 1:
+                # Secondary split on commas for long clauses
+                if len(buffer) > 60 and ',' in buffer:
+                    parts = buffer.split(',', 1)
+                    sentence_buffer.append(parts[0].strip() + ',')
+                    buffer = parts[1].lstrip()
+                    
+                    combined = " ".join(sentence_buffer)
+                    await tts_queue.put((combined, seq, chunk_id, False))
+                    seq += 1
+                    sentence_buffer = []
+            elif len(chunks) > 1:
                 # We have at least one complete sentence
-                complete_sentences = sentences[:-1]
-                buffer = sentences[-1] # keep the incomplete part
+                complete_chunks = chunks[:-1]
+                buffer = chunks[-1] # keep the incomplete part
                 
-                for sentence in complete_sentences:
-                        if self.interrupt_requested:
-                            break
-                        sentence = sentence.strip()
-                        if sentence:
-                            sentence_buffer.append(sentence)
-                            if len(sentence_buffer) >= 1:
-                                combined = ". ".join(sentence_buffer) + "."
-                                await self._synthesize_and_send_sentence(combined, seq, chunk_id, False)
-                                seq += 1
-                                sentence_buffer = []
+                for sentence in complete_chunks:
+                    if self.interrupt_requested:
+                        break
+                    sentence = sentence.strip()
+                    if sentence:
+                        sentence_buffer.append(sentence)
+                        combined = " ".join(sentence_buffer)
+                        await tts_queue.put((combined, seq, chunk_id, False))
+                        seq += 1
+                        sentence_buffer = []
 
             if is_last:
                 if not self.interrupt_requested:
@@ -986,7 +1012,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                         if not combined.endswith("."):
                             combined += "."
                         is_final = (self.part2_state != "cue_card")
-                        await self._synthesize_and_send_sentence(combined, seq, chunk_id, is_final)
+                        await tts_queue.put((combined, seq, chunk_id, is_final))
                         seq += 1
                         if is_final:
                             last_chunk_sent = True
@@ -1013,6 +1039,10 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                             }
                         )
                 break
+        
+        # Stop the TTS worker
+        await tts_queue.put(None)
+        await tts_task
         
         self.last_examiner_text = full_text.replace("[PART2]", "").strip()
         self.conversation_history.append({"role": "assistant", "content": full_text.replace("[PART2]", "").strip()})
@@ -1483,6 +1513,20 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                 }
             )
 
+            tts_queue = asyncio.Queue()
+            async def tts_worker():
+                while True:
+                    item = await tts_queue.get()
+                    if item is None:
+                        tts_queue.task_done()
+                        break
+                    sentence, current_seq, current_chunk_id, is_final_chunk = item
+                    if not self.interrupt_requested:
+                        await self._synthesize_and_send_sentence(sentence, current_seq, current_chunk_id, is_final_chunk)
+                    tts_queue.task_done()
+                    
+            tts_task = asyncio.create_task(tts_worker())
+
             while True:
                 if self.interrupt_requested:
                     break
@@ -1507,22 +1551,32 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                             "payload": {"text": text},
                         })
 
-                    sentences = buffer.replace("?", ".").replace("!", ".").split(".")
-                    if len(sentences) > 1:
-                        complete_sentences = sentences[:-1]
-                        buffer = sentences[-1]
+                    chunks = re.split(r'(?<=[.!?])\s+', buffer)
+                    if len(chunks) == 1:
+                        # Secondary split on commas for long clauses
+                        if len(buffer) > 60 and ',' in buffer:
+                            parts = buffer.split(',', 1)
+                            sentence_buffer.append(parts[0].strip() + ',')
+                            buffer = parts[1].lstrip()
+                            
+                            combined = " ".join(sentence_buffer)
+                            await tts_queue.put((combined, seq, chunk_id, False))
+                            seq += 1
+                            sentence_buffer = []
+                    elif len(chunks) > 1:
+                        complete_chunks = chunks[:-1]
+                        buffer = chunks[-1]
                         
-                        for sentence in complete_sentences:
+                        for sentence in complete_chunks:
                                 if self.interrupt_requested:
                                     break
                                 sentence = sentence.strip()
                                 if sentence:
                                     sentence_buffer.append(sentence)
-                                    if len(sentence_buffer) >= 1:
-                                        combined = ". ".join(sentence_buffer) + "."
-                                        await self._synthesize_and_send_sentence(combined, seq, chunk_id, False)
-                                        seq += 1
-                                        sentence_buffer = []
+                                    combined = " ".join(sentence_buffer)
+                                    await tts_queue.put((combined, seq, chunk_id, False))
+                                    seq += 1
+                                    sentence_buffer = []
 
                 if is_last:
                     if not self.interrupt_requested:
@@ -1535,7 +1589,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                             combined = ". ".join(sentence_buffer) + "."
                             if not combined.endswith("."):
                                 combined += "."
-                            await self._synthesize_and_send_sentence(combined, seq, chunk_id, True)
+                            await tts_queue.put((combined, seq, chunk_id, True))
                             seq += 1
                             last_chunk_sent = True
 
@@ -1554,6 +1608,9 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                                 }
                             )
                     break
+            
+            await tts_queue.put(None)
+            await tts_task
             
             self.last_examiner_text = full_text.strip()
             self.conversation_history.append({"role": "assistant", "content": full_text.strip()})
@@ -1667,6 +1724,20 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                 }
             )
 
+            tts_queue = asyncio.Queue()
+            async def tts_worker():
+                while True:
+                    item = await tts_queue.get()
+                    if item is None:
+                        tts_queue.task_done()
+                        break
+                    sentence, current_seq, current_chunk_id, is_final_chunk = item
+                    if not self.interrupt_requested:
+                        await self._synthesize_and_send_sentence(sentence, current_seq, current_chunk_id, is_final_chunk)
+                    tts_queue.task_done()
+                    
+            tts_task = asyncio.create_task(tts_worker())
+
             while True:
                 if self.interrupt_requested:
                     break
@@ -1691,22 +1762,32 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                             "payload": {"text": text},
                         })
 
-                    sentences = buffer.replace("?", ".").replace("!", ".").split(".")
-                    if len(sentences) > 1:
-                        complete_sentences = sentences[:-1]
-                        buffer = sentences[-1]
+                    chunks = re.split(r'(?<=[.!?])\s+', buffer)
+                    if len(chunks) == 1:
+                        # Secondary split on commas for long clauses
+                        if len(buffer) > 60 and ',' in buffer:
+                            parts = buffer.split(',', 1)
+                            sentence_buffer.append(parts[0].strip() + ',')
+                            buffer = parts[1].lstrip()
+                            
+                            combined = " ".join(sentence_buffer)
+                            await tts_queue.put((combined, seq, chunk_id, False))
+                            seq += 1
+                            sentence_buffer = []
+                    elif len(chunks) > 1:
+                        complete_chunks = chunks[:-1]
+                        buffer = chunks[-1]
                         
-                        for sentence in complete_sentences:
+                        for sentence in complete_chunks:
                                 if self.interrupt_requested:
                                     break
                                 sentence = sentence.strip()
                                 if sentence:
                                     sentence_buffer.append(sentence)
-                                    if len(sentence_buffer) >= 1:
-                                        combined = ". ".join(sentence_buffer) + "."
-                                        await self._synthesize_and_send_sentence(combined, seq, chunk_id, False)
-                                        seq += 1
-                                        sentence_buffer = []
+                                    combined = " ".join(sentence_buffer)
+                                    await tts_queue.put((combined, seq, chunk_id, False))
+                                    seq += 1
+                                    sentence_buffer = []
 
                 if is_last:
                     if not self.interrupt_requested:
@@ -1719,7 +1800,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                             combined = ". ".join(sentence_buffer) + "."
                             if not combined.endswith("."):
                                 combined += "."
-                            await self._synthesize_and_send_sentence(combined, seq, chunk_id, True)
+                            await tts_queue.put((combined, seq, chunk_id, True))
                             seq += 1
                             last_chunk_sent = True
 
@@ -1738,6 +1819,9 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                                 }
                             )
                     break
+            
+            await tts_queue.put(None)
+            await tts_task
             
             self.last_examiner_text = full_text.strip()
             self.conversation_history.append({"role": "assistant", "content": full_text.strip()})
