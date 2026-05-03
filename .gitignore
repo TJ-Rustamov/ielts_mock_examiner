@@ -41,6 +41,7 @@ backend/.env
 # Models directory ignores
 models/*
 !models/.keep
+!models/README.md
 
 # Node / Frontend ignores
 frontend/node_modules/
