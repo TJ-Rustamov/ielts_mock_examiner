@@ -8,6 +8,7 @@
 !/docker-compose.yml
 !/backend/
 !/frontend/
+!/models/
 !/q2_tests.json
 
 # Globally ignore OS and editor files
@@ -36,6 +37,10 @@ backend/*.sqlite3
 backend/media/
 backend/staticfiles/
 backend/.env
+
+# Models directory ignores
+models/*
+!models/.keep
 
 # Node / Frontend ignores
 frontend/node_modules/
