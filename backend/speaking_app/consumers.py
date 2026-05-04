@@ -22,8 +22,9 @@ from speaking_app.models import SpeakingSession
 class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         self.gemini_client = GeminiClient()
-        self.stt_client = FasterWhisperClient()
-        self.tts_client = KokoroClient()
+        self.stt_client = None
+        self.tts_client = None
+        self._model_load_task = None
         self.vad_service = VADService(
             mode=int(os.getenv("VAD_MODE", "2")),
             silence_frames_to_end=int(os.getenv("VAD_SILENCE_FRAMES", "12")),
@@ -297,6 +298,21 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         )
         self.session_id = str(self.session.id)
 
+        async def load_models():
+            from ai_services.stt_client import FasterWhisperClient
+            from ai_services.tts_client import KokoroClient
+            
+            def init_models():
+                stt = FasterWhisperClient()
+                stt._prewarm()
+                tts = KokoroClient()
+                _ = tts.pipeline
+                return stt, tts
+                
+            self.stt_client, self.tts_client = await sync_to_async(init_models, thread_sensitive=False)()
+            
+        self._model_load_task = asyncio.create_task(load_models())
+
         greeting_audio_file = "greeting.wav"
         if part == "all":
             greeting = "Hi. I am your AI mock IELTS examiner and I will be conducting your test. To start could you please tell me about yourself?"
@@ -333,12 +349,34 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             }
         )
         
-        await self._send_static_audio(greeting_audio_file, greeting)
-        
-        # We pre-generated the cue card text above.
-        # Now we just need to background generate the audio chunks for it using Kokoro TTS
-        if part == "2" or part == "all":
+        if part == "all":
+            await self._send_static_audio(greeting_audio_file, greeting)
             self.cue_card_generation_task = asyncio.create_task(self._generate_cue_card_audio_background())
+        elif part == "1":
+            await self._send_static_audio(greeting_audio_file, greeting)
+        elif part == "2":
+            # Pipelined zero-latency start sequence for standalone Part 2
+            self.part2_state = "prep_instructions"
+            await self._send_static_audio(greeting_audio_file, greeting)
+            await self._generate_cue_card_audio_background() # Block just enough to generate the TTS
+            await self._send_pregenerated_cue_card()
+            await self._send_static_audio("prep_instructions.wav", "You will have 1 minute to prepare your answer, and then you will have 1 to 2 minutes to speak. Your preparation time starts now.")
+        elif part == "3":
+            # Pipelined zero-latency start sequence for standalone Part 3
+            await self._send_static_audio(greeting_audio_file, greeting)
+            self.part3_state = "asking_question"
+            self.part3_questions_asked = 1
+            questions_str = json.dumps(self.part3_topic_questions)
+            forced_q_text = f"We are starting Part 3 of the test. I have already announced the start. Directly introduce the topic '{self.part3_current_topic}' and dynamically select an appropriate first question from these suggested questions: {questions_str}. Formulate it conversationally. Do not hallucinate other topics. Do not say 'we will begin part 3'. Do not prefix with 'Examiner:'."
+            
+            chunk_id = f"{self.session_id}:{uuid4().hex}"
+            self.pending_playback_chunk_id = chunk_id
+            generator = self.gemini_client.generate_speaking_turn_stream(
+                self.conversation_history, 
+                part="3", 
+                forced_question=forced_q_text
+            )
+            asyncio.create_task(self._stream_examiner_turn(generator, chunk_id))
 
     async def _send_static_audio(self, filename: str, text: str, force: bool = False):
         if self.stop_requested and not force:
@@ -348,18 +386,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         self.examiner_started_at = timezone.now()
         self.interrupt_requested = False
         self._is_playing_static_audio = True
-        
-        if text:
-            await self.send_json({
-                "type": "examiner.text.start",
-                "session_id": self.session_id,
-                "payload": {},
-            })
-            await self.send_json({
-                "type": "examiner.text.chunk",
-                "session_id": self.session_id,
-                "payload": {"text": text},
-            })
 
         chunk_id = f"{self.session_id}:{uuid4().hex}"
         self.pending_playback_chunk_id = chunk_id
@@ -375,29 +401,39 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
 
         if not self.interrupt_requested:
             if audio_bytes:
+                payload = {
+                    "chunk_id": chunk_id,
+                    "seq": 0,
+                    "is_last": True,
+                    "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
+                    "format": "wav",
+                }
+                if text:
+                    payload["text"] = text + " "
+                    payload["new_bubble"] = True
+                
                 await self.send_json({
                     "type": "examiner.audio.chunk",
                     "session_id": self.session_id,
-                    "payload": {
-                        "chunk_id": chunk_id,
-                        "seq": 0,
-                        "is_last": True,
-                        "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
-                        "format": "wav",
-                    },
+                    "payload": payload,
                 })
             else:
                 # Fallback if audio file is missing
+                payload = {
+                    "chunk_id": chunk_id,
+                    "seq": 0,
+                    "is_last": True,
+                    "audio_base64": "",
+                    "format": "wav",
+                }
+                if text:
+                    payload["text"] = text + " "
+                    payload["new_bubble"] = True
+                    
                 await self.send_json({
                     "type": "examiner.audio.chunk",
                     "session_id": self.session_id,
-                    "payload": {
-                        "chunk_id": chunk_id,
-                        "seq": 0,
-                        "is_last": True,
-                        "audio_base64": "",
-                        "format": "wav",
-                    },
+                    "payload": payload,
                 })
                 
             await self.send_json({
@@ -445,6 +481,8 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             return
         if self.processing_audio:
             return
+        if getattr(self, "_model_load_task", None):
+            await self._model_load_task
 
         audio_b64 = payload.get("audio_base64") or payload.get("audio")
         if not audio_b64:
@@ -606,7 +644,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         self.part2_state = "prep_finished_waiting_for_speech"
         
         # We don't send the text to the history because it's a structural instruction
-        await self._send_static_audio("prep_time_up.wav", "")
+        await self._send_static_audio("prep_time_up.wav", "Alright. Your preparation time is up. Please begin speaking now.")
 
     async def _handle_stop_speaking(self):
         if self.part2_state != "speaking_active":
@@ -647,6 +685,9 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
 
     async def _generate_cue_card_audio_background(self):
         try:
+            if getattr(self, "_model_load_task", None):
+                await self._model_load_task
+
             full_text = self.part2_pregenerated_cue_card.get("text", "")
             if not full_text:
                 return
@@ -680,20 +721,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         
         cue_card = self.part2_pregenerated_cue_card
         
-        await self.send_json({
-            "type": "examiner.text.start",
-            "session_id": self.session_id,
-            "payload": {},
-        })
-        
-        # We don't send character-by-character chunking, we just drop the whole text block
-        # The frontend handles it natively. We format it nicely for cue card logic.
         formatted_text = "[PART2] " + cue_card["text"]
-        await self.send_json({
-            "type": "examiner.text.chunk",
-            "session_id": self.session_id,
-            "payload": {"text": formatted_text},
-        })
 
         if getattr(self, "cue_card_generation_task", None):
             await self.cue_card_generation_task
@@ -705,16 +733,22 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             if self.interrupt_requested:
                 break
             is_last = (idx == len(audio_chunks) - 1)
+            payload = {
+                "chunk_id": chunk_id,
+                "seq": seq,
+                "is_last": is_last,
+                "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
+                "format": "wav",
+            }
+            if idx == 0:
+                payload["text"] = formatted_text
+                payload["new_bubble"] = True
+                payload["new_bubble"] = True
+                
             await self.send_json({
                 "type": "examiner.audio.chunk",
                 "session_id": self.session_id,
-                "payload": {
-                    "chunk_id": chunk_id,
-                    "seq": seq,
-                    "is_last": is_last,
-                    "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
-                    "format": "wav",
-                },
+                "payload": payload,
             })
             seq += 1
             
@@ -774,18 +808,12 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                     
                     # Quickly evaluate
                     history_for_eval = list(self.conversation_history)
-                    history_for_eval.append({
-                        "role": "system",
-                        "content": "Evaluate the candidate's performance in Part 1 so far. If the candidate has provided full, well-developed answers demonstrating good fluency and depth, OR if they have answered several questions already, return STRICTLY the word 'MOVE_TO_PART_2'. Only return 'CONTINUE_PART_1' if their answers were extremely short and you still need more evidence."
-                    })
                     
                     try:
-                        # Use a direct non-streaming call for quick evaluation
-                        eval_result_dict = await sync_to_async(self.gemini_client.generate_speaking_turn, thread_sensitive=False)(history_for_eval, part="1")
-                        eval_text = eval_result_dict.get("examiner_text", "").strip().upper()
-                        print(f"[DEBUG PART 1] AI Evaluation Result: {eval_text}")
+                        move_to_part_2 = await sync_to_async(self.gemini_client.evaluate_part1_transition, thread_sensitive=False)(history_for_eval)
+                        print(f"[DEBUG PART 1] AI Evaluation Result (move_to_part_2): {move_to_part_2}")
                         
-                        if ("MOVE_TO" in eval_text and self.part1_total_questions_asked >= 2) or self.part1_total_questions_asked >= 10:
+                        if (move_to_part_2 and self.part1_total_questions_asked >= 2) or self.part1_total_questions_asked >= 10:
                             # Move to Part 2 if running in 'all' mode, or end if just '1'
                             if part == "1":
                                 self.conversation_history.append({"role": "assistant", "content": "Thank you, that is the end of Part 1 and the test."})
@@ -793,12 +821,16 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                                 asyncio.create_task(self._finalize_session_start_background())
                                 return
                             else:
-                                # Transition to Part 2
+                                # Transition to Part 2 with Zero-Latency Pipeline
                                 print("[DEBUG PART 1] Moving to Part 2")
-                                self.part2_state = "greeting"
                                 self.part1_state = "none"
                                 self.conversation_history.append({"role": "assistant", "content": "Now, let's move on to Part 2 of the test."})
+                                
+                                self.prep_seconds, self.speaking_seconds = self._get_part_timing("2")
+                                self.part2_state = "prep_instructions"
                                 await self._send_static_audio("move_to_part2.wav", "Now, let's move on to Part 2 of the test.")
+                                await self._send_pregenerated_cue_card()
+                                await self._send_static_audio("prep_instructions.wav", "You will have 1 minute to prepare your answer, and then you will have 1 to 2 minutes to speak. Your preparation time starts now.")
                                 return
                     except Exception as e:
                         print(f"[DEBUG PART 1] Eval failed: {e}")
@@ -814,11 +846,11 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                     print(f"[DEBUG PART 1 NEXT TOPIC] Selected Topic: {topic}")
                     print(f"[DEBUG PART 1 NEXT TOPIC] Selected Questions: {questions}")
                     
-                    # The AI will naturally handle the transition now
-                    # await self._send_static_audio("next_topic.wav", "")
+                    # Zero-Latency pipelined topic transition
+                    await self._send_static_audio("next_topic.wav", "Let's move on to the next topic.")
                     
                     questions_str = json.dumps(self.part1_topic_questions)
-                    forced_q_text = f"We are moving to a new topic. Naturally introduce the new topic '{self.part1_current_topic}' (e.g., 'Let's move on to talk about {self.part1_current_topic}') and dynamically ask a relevant question from this list: {questions_str}. Formulate it conversationally. Do not hallucinate other topics. Do not prefix with 'Examiner:'."
+                    forced_q_text = f"We are moving to a new topic '{self.part1_current_topic}'. I have already announced the transition. Directly ask an appropriate first question from this list: {questions_str}. Do not say 'let's move on'. Just ask the question conversationally. Do not hallucinate other topics. Do not prefix with 'Examiner:'."
                     print(f"[DEBUG PART 1] Injected Prompt for Next Topic Q: {forced_q_text}")
                     history_for_gen = self.conversation_history
                     
@@ -879,7 +911,12 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             part=part, 
             forced_question=forced_q_text
         )
+        await self._stream_examiner_turn(generator, chunk_id)
         
+    async def _stream_examiner_turn(self, generator, chunk_id: str):
+        if getattr(self, "_model_load_task", None):
+            await self._model_load_task
+            
         def _next_text_chunk():
             try:
                 return next(generator, None)
@@ -892,19 +929,9 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         sentence_buffer = []
         test_concluded = False
         
-        # Notify frontend we are starting to stream text
-        await self.send_json(
-            {
-                "type": "examiner.text.start",
-                "session_id": self.session_id,
-                "payload": {},
-            }
-        )
-
         self.interrupted_remaining_text = ""
         _collected_unsent = False
         
-        # Create a queue and a worker for parallel TTS generation
         tts_queue = asyncio.Queue()
         async def tts_worker():
             while True:
@@ -912,9 +939,9 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                 if item is None:
                     tts_queue.task_done()
                     break
-                sentence, current_seq, current_chunk_id, is_final_chunk = item
+                sentence, current_seq, current_chunk_id, is_final_chunk, sentence_text = item
                 if not self.interrupt_requested:
-                    await self._synthesize_and_send_sentence(sentence, current_seq, current_chunk_id, is_final_chunk)
+                    await self._synthesize_and_send_sentence(sentence, current_seq, current_chunk_id, is_final_chunk, sentence_text)
                 tts_queue.task_done()
                 
         tts_task = asyncio.create_task(tts_worker())
@@ -944,14 +971,11 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                 buffer += text
                 full_text += text
             
-            # Prevent synthesis if Gemini decides to print test conclusion evaluations
             if "Scores:" in full_text or "Overall Band" in full_text or "overall_band" in full_text:
                  test_concluded = True
-                 buffer = ""  # clear buffer so it doesn't synthesize the evaluation payload
+                 buffer = ""  
                  is_last = True
             
-            # Output Sanitization: Remove hidden system artifacts or markdown that might leak
-            # from the streaming output.
             buffer = buffer.replace("[System Note]", "").replace("Examiner:", "").replace("**", "")
             
             if "[PART2]" in full_text:
@@ -959,34 +983,22 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                     self.part2_state = "cue_card"
                     if self.prep_seconds == 0 or self.speaking_seconds == 0:
                         self.prep_seconds, self.speaking_seconds = self._get_part_timing("2")
-                # We only strip from buffer to prevent TTS from reading it.
-                # We leave it in full_text and text so the frontend can intercept it and style the cue card.
                 buffer = buffer.replace("[PART2]", "").lstrip()
 
-            if text:
-                await self.send_json({
-                    "type": "examiner.text.chunk",
-                    "session_id": self.session_id,
-                    "payload": {"text": text},
-                })
-
-            # Look for sentences to synthesize
             chunks = re.split(r'(?<=[.!?])\s+', buffer)
             if len(chunks) == 1:
-                # Secondary split on commas for long clauses
                 if len(buffer) > 60 and ',' in buffer:
                     parts = buffer.split(',', 1)
                     sentence_buffer.append(parts[0].strip() + ',')
                     buffer = parts[1].lstrip()
                     
                     combined = " ".join(sentence_buffer)
-                    await tts_queue.put((combined, seq, chunk_id, False))
+                    await tts_queue.put((combined, seq, chunk_id, False, combined + " "))
                     seq += 1
                     sentence_buffer = []
             elif len(chunks) > 1:
-                # We have at least one complete sentence
                 complete_chunks = chunks[:-1]
-                buffer = chunks[-1] # keep the incomplete part
+                buffer = chunks[-1] 
                 
                 for sentence in complete_chunks:
                     if self.interrupt_requested:
@@ -995,13 +1007,12 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                     if sentence:
                         sentence_buffer.append(sentence)
                         combined = " ".join(sentence_buffer)
-                        await tts_queue.put((combined, seq, chunk_id, False))
+                        await tts_queue.put((combined, seq, chunk_id, False, combined + " "))
                         seq += 1
                         sentence_buffer = []
 
             if is_last:
                 if not self.interrupt_requested:
-                    # Flush the remaining buffer
                     if buffer.strip():
                         sentence_buffer.append(buffer.strip())
                     
@@ -1012,19 +1023,12 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                         if not combined.endswith("."):
                             combined += "."
                         is_final = (self.part2_state != "cue_card")
-                        await tts_queue.put((combined, seq, chunk_id, is_final))
+                        await tts_queue.put((combined, seq, chunk_id, is_final, combined + " "))
                         seq += 1
                         if is_final:
                             last_chunk_sent = True
-                        
-                    # Append the strict text marker for Part 2 prep without phrase matching reliance
-                    if self.part2_state == "cue_card":
-                        prep_text = ""
-                        # prep_text is handled by the model prompt, so we don't need to append it again here.
-                        pass
 
                     if not last_chunk_sent:
-                         # We need to tell frontend we are done
                          await self.send_json(
                             {
                                 "type": "examiner.audio.chunk",
@@ -1040,7 +1044,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                         )
                 break
         
-        # Stop the TTS worker
         await tts_queue.put(None)
         await tts_task
         
@@ -1063,21 +1066,28 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             
             self.playback_timeout_task = asyncio.create_task(self._wait_for_playback_timeout(chunk_id))
                 
-    async def _synthesize_and_send_sentence(self, sentence: str, seq: int, chunk_id: str, is_last: bool):
+    async def _synthesize_and_send_sentence(self, sentence: str, seq: int, chunk_id: str, is_last: bool, sentence_text: str = ""):
+        if getattr(self, "_model_load_task", None):
+            await self._model_load_task
+            
         audio_bytes = await sync_to_async(self.tts_client.generate_audio, thread_sensitive=False)(sentence)
         
         if audio_bytes and not self.interrupt_requested:
+            payload = {
+                "chunk_id": chunk_id,
+                "seq": seq,
+                "is_last": is_last,
+                "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
+                "format": "wav",
+            }
+            if sentence_text:
+                payload["text"] = sentence_text
+                
             await self.send_json(
                 {
                     "type": "examiner.audio.chunk",
                     "session_id": self.session_id,
-                    "payload": {
-                        "chunk_id": chunk_id,
-                        "seq": seq,
-                        "is_last": is_last,
-                        "audio_base64": base64.b64encode(audio_bytes).decode("utf-8"),
-                        "format": "wav",
-                    },
+                    "payload": payload,
                 }
             )
 
@@ -1130,14 +1140,16 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             self.playback_timeout_task = None
         self.pending_playback_chunk_id = None
 
-        # Determine the farewell text based on history or default
-        farewell_text = "Thank you, that is the end of the speaking test."
-        if getattr(self.session, "part", "all") == "1":
-            farewell_text = "Thank you, that is the end of Part 1 and the test."
-        elif getattr(self.session, "part", "all") == "2" and not self._has_candidate_response():
-             farewell_text = "I see. We will now conclude the test. Thank you."
+        if not getattr(self, "_farewell_played", False):
+            # Determine the farewell text based on history or default
+            farewell_text = "Thank you, that is the end of the speaking test."
+            if getattr(self.session, "part", "all") == "1":
+                farewell_text = "Thank you, that is the end of Part 1 and the test."
+            elif getattr(self.session, "part", "all") == "2" and not self._has_candidate_response():
+                 farewell_text = "Thank you, that is the end of the speaking test."
 
-        await self._send_static_audio("farewell.wav", farewell_text, force=True)
+            await self._send_static_audio("farewell.wav", farewell_text, force=True)
+            self._farewell_played = True
 
         transcript = "\n".join(
             [f"{item['role']}: {item['content']}" for item in self.conversation_history if item["role"] in {"assistant", "user"}]
@@ -1373,17 +1385,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         self.last_examiner_text = text
         self.conversation_history.append({"role": "assistant", "content": text})
         
-        await self.send_json({
-            "type": "examiner.text.start",
-            "session_id": self.session_id,
-            "payload": {},
-        })
-        await self.send_json({
-            "type": "examiner.text.chunk",
-            "session_id": self.session_id,
-            "payload": {"text": text},
-        })
-        
         chunk_id = f"{self.session_id}:{uuid4().hex}"
         self.pending_playback_chunk_id = chunk_id
 
@@ -1393,7 +1394,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             sentence = sentence.strip()
             if sentence and not self.interrupt_requested:
                 is_last = (seq == len(sentences) - 1)
-                await self._synthesize_and_send_sentence(sentence, seq, chunk_id, is_last)
+                await self._synthesize_and_send_sentence(sentence, seq, chunk_id, is_last, sentence + ". ")
                 seq += 1
 
         if not self.interrupt_requested:
@@ -1436,12 +1437,6 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                 "session_id": self.session_id,
                 "payload": {"phase": "speaking", "seconds_left": 0}
             })
-            
-            # Give candidate 5 seconds buffer to finish sentence
-            await asyncio.sleep(5)
-            
-            if self.stop_requested:
-                return
 
             self.part2_state = "done"
             await self._force_candidate_cutoff()
@@ -1639,7 +1634,11 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
 
             if part_mode == "2":
                 self.stop_requested = True
-                self.conversation_history.append({"role": "assistant", "content": "I see. We will now conclude the test. Thank you."})
+                self.conversation_history.append({"role": "assistant", "content": "Thank you, that is the end of the speaking test."})
+
+                # Play farewell immediately so user knows the test is ending
+                await self._send_static_audio("farewell.wav", "Thank you, that is the end of the speaking test.", force=True)
+                self._farewell_played = True
                 
                 async def finish_part2_and_eval():
                     try:
@@ -1692,7 +1691,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
             forced_q_text = f"We are moving to Part 3. I have just played a transition audio. Naturally introduce the topic '{self.part3_current_topic}' (e.g., 'Now let's consider {self.part3_current_topic} more generally') and dynamically select an appropriate first question from these suggested questions: {questions_str}. Formulate it conversationally. Do not hallucinate other topics. Do not prefix with 'Examiner:'."
             print(f"[DEBUG PART 3 START] Injected Prompt for 1st Q: {forced_q_text}")
             
-            # Start stream
+            # Start stream pipelined with static audio
             self._is_playing_static_audio = False
             self.examiner_started_at = timezone.now()
             self.interrupt_requested = False
@@ -1704,137 +1703,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
                 part="all", 
                 forced_question=forced_q_text
             )
-            # Proceed with standard generation loop
-            def _next_text_chunk_bg():
-                try:
-                    return next(generator, None)
-                except Exception:
-                    return {"text": "", "is_last": True}
-                    
-            buffer = ""
-            full_text = ""
-            seq = 0
-            sentence_buffer = []
-            
-            await self.send_json(
-                {
-                    "type": "examiner.text.start",
-                    "session_id": self.session_id,
-                    "payload": {},
-                }
-            )
-
-            tts_queue = asyncio.Queue()
-            async def tts_worker():
-                while True:
-                    item = await tts_queue.get()
-                    if item is None:
-                        tts_queue.task_done()
-                        break
-                    sentence, current_seq, current_chunk_id, is_final_chunk = item
-                    if not self.interrupt_requested:
-                        await self._synthesize_and_send_sentence(sentence, current_seq, current_chunk_id, is_final_chunk)
-                    tts_queue.task_done()
-                    
-            tts_task = asyncio.create_task(tts_worker())
-
-            while True:
-                if self.interrupt_requested:
-                    break
-                    
-                chunk = await sync_to_async(_next_text_chunk_bg, thread_sensitive=True)()
-                if not chunk:
-                    break
-                    
-                text = chunk.get("text", "")
-                is_last = chunk.get("is_last", False)
-                
-                if text:
-                    buffer += text
-                    full_text += text
-                    
-                    buffer = buffer.replace("[System Note]", "").replace("Examiner:", "").replace("**", "")
-
-                    if text:
-                        await self.send_json({
-                            "type": "examiner.text.chunk",
-                            "session_id": self.session_id,
-                            "payload": {"text": text},
-                        })
-
-                    chunks = re.split(r'(?<=[.!?])\s+', buffer)
-                    if len(chunks) == 1:
-                        # Secondary split on commas for long clauses
-                        if len(buffer) > 60 and ',' in buffer:
-                            parts = buffer.split(',', 1)
-                            sentence_buffer.append(parts[0].strip() + ',')
-                            buffer = parts[1].lstrip()
-                            
-                            combined = " ".join(sentence_buffer)
-                            await tts_queue.put((combined, seq, chunk_id, False))
-                            seq += 1
-                            sentence_buffer = []
-                    elif len(chunks) > 1:
-                        complete_chunks = chunks[:-1]
-                        buffer = chunks[-1]
-                        
-                        for sentence in complete_chunks:
-                                if self.interrupt_requested:
-                                    break
-                                sentence = sentence.strip()
-                                if sentence:
-                                    sentence_buffer.append(sentence)
-                                    combined = " ".join(sentence_buffer)
-                                    await tts_queue.put((combined, seq, chunk_id, False))
-                                    seq += 1
-                                    sentence_buffer = []
-
-                if is_last:
-                    if not self.interrupt_requested:
-                        if buffer.strip():
-                            sentence_buffer.append(buffer.strip())
-                        
-                        last_chunk_sent = False
-                        
-                        if sentence_buffer:
-                            combined = ". ".join(sentence_buffer) + "."
-                            if not combined.endswith("."):
-                                combined += "."
-                            await tts_queue.put((combined, seq, chunk_id, True))
-                            seq += 1
-                            last_chunk_sent = True
-
-                        if not last_chunk_sent:
-                             await self.send_json(
-                                {
-                                    "type": "examiner.audio.chunk",
-                                    "session_id": self.session_id,
-                                    "payload": {
-                                        "chunk_id": chunk_id,
-                                        "seq": seq,
-                                        "is_last": True,
-                                        "audio_base64": "",
-                                        "format": "wav",
-                                    },
-                                }
-                            )
-                    break
-            
-            await tts_queue.put(None)
-            await tts_task
-            
-            self.last_examiner_text = full_text.strip()
-            self.conversation_history.append({"role": "assistant", "content": full_text.strip()})
-            
-            if not self.interrupt_requested:
-                await self.send_json(
-                    {
-                        "type": "examiner.audio.done",
-                        "session_id": self.session_id,
-                        "payload": {"chunk_id": chunk_id},
-                    }
-                )
-                self.playback_timeout_task = asyncio.create_task(self._wait_for_playback_timeout(chunk_id))
+            asyncio.create_task(self._stream_examiner_turn(generator, chunk_id))
         except Exception:
             await self._set_turn_state("candidate_speaking")
         finally:
@@ -1844,6 +1713,9 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         if not raw_audio:
             return
         try:
+            if getattr(self, "_model_load_task", None):
+                await self._model_load_task
+                
             if getattr(self, "last_is_pcm", True):
                 transcript = await sync_to_async(self.stt_client.transcribe_pcm16_bytes, thread_sensitive=False)(
                     raw_audio, sample_rate
@@ -1871,7 +1743,7 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
 
     def _has_candidate_response(self) -> bool:
         return any(
-            str(item.get("content", "")).strip()
+            str(item.get("content", "")).strip() and "[Candidate remained completely silent" not in str(item.get("content", ""))
             for item in self.conversation_history
             if item.get("role") == "user"
         )
