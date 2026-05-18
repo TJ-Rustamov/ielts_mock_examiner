@@ -4,9 +4,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { KeyRound, MoreVertical, Search, Trash2, UserPlus } from 'lucide-react';
+import { KeyRound, MoreVertical, Search, Trash2, UserPlus, AlertTriangle } from 'lucide-react';
 import { fetchJson } from '@/lib/backend';
 
 type AdminUser = {
@@ -28,6 +28,11 @@ const UserManagement = () => {
   const [error, setError] = useState<string | null>(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', email: '', password: '' });
+
+  const [resetPasswordUser, setResetPasswordUser] = useState<AdminUser | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+
+  const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
 
   const loadUsers = async (term = '') => {
     setLoading(true);
@@ -86,11 +91,19 @@ const UserManagement = () => {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetPasswordUser || !newPassword) return;
+    await patchUser(resetPasswordUser.id, { password: newPassword });
+    setResetPasswordUser(null);
+    setNewPassword('');
+  };
+
   const handleDelete = async (userId: number) => {
     setError(null);
     try {
       await fetchJson<{}>(`/api/admin/users/${userId}`, { method: 'DELETE' });
       setUsers((prev) => prev.filter((u) => u.id !== userId));
+      setDeleteUser(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete user');
     }
@@ -175,10 +188,10 @@ const UserManagement = () => {
                     <DropdownMenuItem onClick={() => patchUser(user.id, { is_staff: !(user.is_staff || user.is_superuser) })}>
                       {user.is_staff || user.is_superuser ? 'Set as User' : 'Set as Admin'}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => patchUser(user.id, { password: '!@#$%QWERT' })}>
+                    <DropdownMenuItem onClick={() => { setResetPasswordUser(user); setNewPassword(''); }}>
                       <KeyRound className="h-4 w-4 mr-2" />Reset Password
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(user.id)}>
+                    <DropdownMenuItem className="text-destructive" onClick={() => setDeleteUser(user)}>
                       <Trash2 className="h-4 w-4 mr-2" />Delete
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -188,6 +201,48 @@ const UserManagement = () => {
           ))}
         </div>
       </div>
+
+      <Dialog open={!!resetPasswordUser} onOpenChange={(open) => !open && setResetPasswordUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <p className="text-sm text-muted-foreground">
+              Enter a new password for <strong>{resetPasswordUser?.username}</strong>.
+            </p>
+            <Input 
+              type="password" 
+              placeholder="New Password" 
+              value={newPassword} 
+              onChange={(e) => setNewPassword(e.target.value)} 
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetPasswordUser(null)}>Cancel</Button>
+            <Button onClick={handleResetPassword} disabled={!newPassword}>Reset Password</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center text-destructive">
+              <AlertTriangle className="h-5 w-5 mr-2" /> Confirm Deletion
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-2">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete user <strong>{deleteUser?.username}</strong>? This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteUser(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => deleteUser && handleDelete(deleteUser.id)}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 };

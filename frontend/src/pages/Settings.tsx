@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { User, Trash2, Settings2, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -53,10 +53,36 @@ const Settings = () => {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isCurrentPasswordCorrect, setIsCurrentPasswordCorrect] = useState<boolean | null>(null);
+  const [isCheckingPassword, setIsCheckingPassword] = useState(false);
 
   const [isUpdatingUsername, setIsUpdatingUsername] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    const checkPassword = async () => {
+      if (!currentPassword) {
+        setIsCurrentPasswordCorrect(null);
+        return;
+      }
+      setIsCheckingPassword(true);
+      try {
+        const res = await fetchJson('/api/auth/check-password', {
+          method: 'POST',
+          body: JSON.stringify({ password: currentPassword })
+        });
+        setIsCurrentPasswordCorrect((res as any).valid);
+      } catch (e) {
+        setIsCurrentPasswordCorrect(false);
+      } finally {
+        setIsCheckingPassword(false);
+      }
+    };
+    
+    const timeoutId = setTimeout(checkPassword, 500);
+    return () => clearTimeout(timeoutId);
+  }, [currentPassword]);
 
   const handleUpdateUsername = async () => {
     if (!newUsername) return toast({ title: 'Username cannot be empty', variant: 'destructive' });
@@ -159,6 +185,7 @@ const Settings = () => {
                 <CardTitle className="flex items-center gap-2"><User className="h-5 w-5 text-primary" /> Username</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="text-sm text-muted-foreground mb-2">Current username: <strong className="text-foreground">{user?.username}</strong></div>
                 <Input placeholder="New username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} />
                 <Button className="glow-sm" onClick={handleUpdateUsername} disabled={isUpdatingUsername}>
                   {isUpdatingUsername ? 'Updating...' : 'Update Username'}
@@ -173,10 +200,33 @@ const Settings = () => {
                 <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5 text-primary" /> Change Password</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Input type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
-                <Input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                <Input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-                <Button className="glow-sm" onClick={handleUpdatePassword} disabled={isUpdatingPassword}>
+                <div>
+                  <Input type="password" placeholder="Current password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                  {isCurrentPasswordCorrect === true && (
+                    <div className="text-green-500 text-sm mt-1">Correct password</div>
+                  )}
+                  {isCurrentPasswordCorrect === false && currentPassword && !isCheckingPassword && (
+                    <div className="text-red-500 text-sm mt-1">Incorrect password</div>
+                  )}
+                  {isCheckingPassword && <div className="text-muted-foreground text-sm mt-1">Checking...</div>}
+                </div>
+                
+                <Input 
+                  type="password" 
+                  placeholder="New password" 
+                  value={newPassword} 
+                  onChange={(e) => setNewPassword(e.target.value)} 
+                  disabled={!isCurrentPasswordCorrect}
+                />
+                <Input 
+                  type="password" 
+                  placeholder="Confirm new password" 
+                  value={confirmPassword} 
+                  onChange={(e) => setConfirmPassword(e.target.value)} 
+                  disabled={!isCurrentPasswordCorrect}
+                />
+                
+                <Button className="glow-sm" onClick={handleUpdatePassword} disabled={isUpdatingPassword || !isCurrentPasswordCorrect}>
                   {isUpdatingPassword ? 'Updating...' : 'Update Password'}
                 </Button>
               </CardContent>

@@ -4,7 +4,7 @@ import { Mic, Volume2, CheckCircle2, Loader2, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import Layout from '@/components/Layout';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useThemeContext } from '@/contexts/ThemeContext';
 import { fetchJson, wsUrl } from '@/lib/backend';
 import { getAuthToken, getCurrentUser } from '@/lib/auth';
@@ -89,6 +89,7 @@ const CollapsibleMessage = ({ text }: { text: string }) => {
 
 const SpeakingTest = () => {
   const { part } = useParams();
+  const navigate = useNavigate();
   const { setStudyMode } = useThemeContext();
   const initialIsPart2 = String(part || '').trim() === '2';
 
@@ -129,7 +130,7 @@ const SpeakingTest = () => {
   const turnMinSpeechMsRef = useRef(450);
   const activeAudioChunkIdRef = useRef<string | null>(null);
   const expectedAudioSeqRef = useRef(0);
-  const audioChunkBufferRef = useRef<Map<number, { audioBase64: string; isLast: boolean }>>(new Map());
+  const audioChunkBufferRef = useRef<Map<number, { audioBase64: string; isLast: boolean; text?: string, newBubble?: boolean }>>(new Map());
   const messagesTopRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => { setStudyMode('speaking'); }, [setStudyMode]);
@@ -263,7 +264,7 @@ const SpeakingTest = () => {
         if (msg.type === 'examiner.text.chunk' && msg.payload?.text) {
           const textChunk = String(msg.payload.text);
           setMessages((prev) => {
-            if (prev.length === 0) return prev;
+            if (prev.length === 0) return [{ id: Date.now().toString() + Math.random(), role: 'examiner', text: textChunk }];
             const lastMsg = prev[prev.length - 1];
             if (lastMsg.role === 'examiner') {
               let updatedText = lastMsg.text + textChunk;
@@ -299,7 +300,9 @@ const SpeakingTest = () => {
           const chunkId = String(msg.payload.chunk_id || '').trim();
           const seq = Number(msg.payload.seq || 0);
           const isLast = Boolean(msg.payload.is_last);
-          if (chunkId) queueAudioPlaybackChunk(chunkId, seq, isLast, String(msg.payload.audio_base64));
+          const text = msg.payload.text ? String(msg.payload.text) : undefined;
+          const newBubble = Boolean(msg.payload.new_bubble);
+          if (chunkId) queueAudioPlaybackChunk(chunkId, seq, isLast, String(msg.payload.audio_base64), text, newBubble);
         }
 
         if (msg.type === 'playback.stop') {
@@ -359,21 +362,21 @@ const SpeakingTest = () => {
         }
 
         if (msg.type === 'session.report.partial') {
-          setReport({ scores: msg.payload?.scores || {} });
-          setEvaluationStatus('processing');
           stopMicCapture();
-          setTestState('finished');
-          setTimerPhase('idle');
-          setTurnState('finished');
+          // Redirect immediately to session detail page
+          const navSessionId = msg.session_id || sessionId;
+          if (navSessionId) {
+            navigate(`/session/s-${navSessionId}`);
+          }
         }
 
         if (msg.type === 'session.report.final') {
-          setReport(msg.payload || null);
-          setEvaluationStatus('ready');
+          // If we somehow get the final report before redirecting, handle it the same way
           stopMicCapture();
-          setTestState('finished');
-          setTimerPhase('idle');
-          setTurnState('finished');
+          const navSessionId = msg.session_id || sessionId;
+          if (navSessionId) {
+            navigate(`/session/s-${navSessionId}`);
+          }
         }
 
         if (msg.type === 'session.report') {
@@ -395,10 +398,43 @@ const SpeakingTest = () => {
     });
   };
 
-  const queueAudioPlayback = (audioBase64: string, isLast: boolean, chunkId: string) => {
+  const queueAudioPlayback = (audioBase64: string, isLast: boolean, chunkId: string, text?: string, newBubble?: boolean) => {
     playbackQueueRef.current = playbackQueueRef.current.then(async () => {
       if (stopRequestedRef.current) return;
       
+      if (text) {
+        setMessages((prev) => {
+          if (prev.length === 0 || newBubble) {
+            let processedText = text;
+            let isCueCard = false;
+            if (processedText.includes('[PART2]')) {
+                isCueCard = true;
+                processedText = processedText.replace(/\[PART2\]\s*/g, '');
+            }
+            return [...prev, { id: Date.now().toString() + Math.random(), role: 'examiner', text: processedText, isCueCard }];
+          }
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg.role === 'examiner') {
+            let updatedText = lastMsg.text + text;
+            let isCueCard = lastMsg.isCueCard;
+            if (updatedText.includes('[PART2]')) {
+                isCueCard = true;
+                updatedText = updatedText.replace(/\[PART2\]\s*/g, '');
+            }
+            const updated = [...prev];
+            updated[updated.length - 1] = { ...lastMsg, text: updatedText, isCueCard };
+            return updated;
+          }
+          let processedText = text;
+          let isCueCard = false;
+          if (processedText.includes('[PART2]')) {
+              isCueCard = true;
+              processedText = processedText.replace(/\[PART2\]\s*/g, '');
+          }
+          return [...prev, { id: Date.now().toString() + Math.random(), role: 'examiner', text: processedText, isCueCard }];
+        });
+      }
+
       try {
         if (!audioContextRef.current) {
           audioContextRef.current = new AudioContext({ sampleRate: 16000 });
@@ -514,7 +550,7 @@ const SpeakingTest = () => {
     };
   }, [sessionStarted, testState, sessionId]);
 
-  const queueAudioPlaybackChunk = (chunkId: string, seq: number, isLast: boolean, audioBase64: string) => {
+  const queueAudioPlaybackChunk = (chunkId: string, seq: number, isLast: boolean, audioBase64: string, text?: string, newBubble?: boolean) => {
     console.log(`Received audio chunk: id=${chunkId}, seq=${seq}, isLast=${isLast}, base64Len=${audioBase64.length}`);
     if (activeAudioChunkIdRef.current !== chunkId) {
       activeAudioChunkIdRef.current = chunkId;
@@ -522,7 +558,7 @@ const SpeakingTest = () => {
       audioChunkBufferRef.current.clear();
     }
 
-    audioChunkBufferRef.current.set(seq, { audioBase64, isLast });
+    audioChunkBufferRef.current.set(seq, { audioBase64, isLast, text, newBubble });
     while (audioChunkBufferRef.current.has(expectedAudioSeqRef.current)) {
       const expectedSeq = expectedAudioSeqRef.current;
       const item = audioChunkBufferRef.current.get(expectedSeq);
@@ -531,11 +567,41 @@ const SpeakingTest = () => {
       audioChunkBufferRef.current.delete(expectedSeq);
       
       if (item.audioBase64) {
-          queueAudioPlayback(item.audioBase64, item.isLast, chunkId);
+          queueAudioPlayback(item.audioBase64, item.isLast, chunkId, item.text, item.newBubble);
       } else if (item.isLast) {
         // If there's no audio but it's the last chunk (e.g., empty buffer), just schedule the done signal
         playbackQueueRef.current = playbackQueueRef.current.then(async () => {
           if (!stopRequestedRef.current) {
+            if (item.text) {
+              setMessages((prev) => {
+                if (prev.length === 0 || item.newBubble) {
+                  let processedText = item.text!;
+                  let isCueCard = false;
+                  if (processedText.includes('[PART2]')) {
+                      isCueCard = true;
+                      processedText = processedText.replace(/\[PART2\]\s*/g, '');
+                  }
+                  return [...prev, { id: Date.now().toString() + Math.random(), role: 'examiner', text: processedText, isCueCard }];
+                }
+                const lastMsg = prev[prev.length - 1];
+                if (lastMsg.role === 'examiner') {
+                  let updatedText = lastMsg.text + item.text;
+                  let isCueCard = lastMsg.isCueCard;
+                  if (updatedText.includes('[PART2]')) {
+                      isCueCard = true;
+                      updatedText = updatedText.replace(/\[PART2\]\s*/g, '');
+                  }
+                  return [...prev.slice(0, -1), { ...lastMsg, text: updatedText, isCueCard }];
+                }
+                let processedText = item.text!;
+                let isCueCard = false;
+                if (processedText.includes('[PART2]')) {
+                    isCueCard = true;
+                    processedText = processedText.replace(/\[PART2\]\s*/g, '');
+                }
+                return [...prev, { id: Date.now().toString() + Math.random(), role: 'examiner', text: processedText, isCueCard }];
+              });
+            }
             console.log(`Sending playback done for chunk: ${chunkId}`);
             sendPlaybackDone(chunkId);
           }

@@ -36,9 +36,6 @@ class KokoroClient:
                 self.speed = float(cfg.speed or 1.05)
         except Exception:
             pass
-            
-        # Trigger global load if not done
-        _ = self.pipeline
 
     def _resolve_voice(self, value: str | None = None) -> str:
         voice_name = (value or self.voice or "").strip()

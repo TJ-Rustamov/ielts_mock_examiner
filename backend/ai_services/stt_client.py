@@ -14,7 +14,6 @@ class FasterWhisperClient:
         self.model_size = os.getenv("WHISPER_MODEL_SIZE", "base")
         self.device = os.getenv("WHISPER_DEVICE", "cpu")
         self.compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-        self._prewarm()
 
     def _prewarm(self):
         try:

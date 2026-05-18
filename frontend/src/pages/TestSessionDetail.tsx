@@ -10,6 +10,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import Layout from '@/components/Layout';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchJson } from '@/lib/backend';
+import { useThemeContext } from '@/contexts/ThemeContext';
 
 type CriterionKey = 'fc' | 'lr' | 'gra';
 
@@ -85,9 +86,15 @@ const toConciseCommentPoints = (raw: string): string[] => {
   return cleaned
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 4)
-    .map((line) => (line.length > 140 ? `${line.slice(0, 137)}...` : line));
+    .filter(Boolean);
+};
+
+const formatBandScore = (score: number): string => {
+  const floor = Math.floor(score);
+  const fraction = score - floor;
+  if (fraction < 0.5) return floor.toFixed(1);
+  if (fraction >= 0.7) return (floor + 1).toFixed(1);
+  return (floor + 0.5).toFixed(1);
 };
 
 const formatDate = (value: string): string => {
@@ -99,6 +106,11 @@ const formatDate = (value: string): string => {
 const TestSessionDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { setStudyMode } = useThemeContext();
+
+  useEffect(() => {
+    setStudyMode('speaking');
+  }, [setStudyMode]);
 
   const [data, setData] = useState<SpeakingDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -612,7 +624,7 @@ const TestSessionDetail = () => {
     setSelectedImprovementKey(null);
   }, [selectedBand]);
 
-  const overall = Number(scores?.overall_band || 0).toFixed(1);
+  const overall = formatBandScore(Number(scores?.overall_band || 0));
 
   return (
     <Layout>

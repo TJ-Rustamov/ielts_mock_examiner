@@ -34,9 +34,17 @@ type SessionCard = {
   topic: string;
 };
 
+const formatBandScore = (score: number): number => {
+  const floor = Math.floor(score);
+  const fraction = score - floor;
+  if (fraction < 0.5) return floor;
+  if (fraction >= 0.7) return floor + 1;
+  return floor + 0.5;
+};
+
 const toScore = (scores: Record<string, number> | undefined): number => {
   const value = Number(scores?.overall_band ?? 0);
-  return Number.isFinite(value) ? value : 0;
+  return Number.isFinite(value) ? formatBandScore(value) : 0;
 };
 
 const truncate = (value: string, maxLength = 80): string => {
@@ -127,7 +135,8 @@ const Dashboard = () => {
 
   const sessions = activeView === 'writing' ? writingSessions : filteredSpeakingSessions;
   const safeScores = sessions.map((s) => s.score).filter((s) => Number.isFinite(s) && s > 0);
-  const avgScore = safeScores.length ? (safeScores.reduce((a, s) => a + s, 0) / safeScores.length).toFixed(1) : '0.0';
+  const rawAvg = safeScores.length ? (safeScores.reduce((a, s) => a + s, 0) / safeScores.length) : 0;
+  const avgScore = safeScores.length ? formatBandScore(rawAvg).toFixed(1) : '0.0';
   const bestScore = safeScores.length ? Math.max(...safeScores).toFixed(1) : '0.0';
   const improvement = safeScores.length >= 2 ? `+${(safeScores[0] - safeScores[safeScores.length - 1]).toFixed(1)}` : '+0.0';
 

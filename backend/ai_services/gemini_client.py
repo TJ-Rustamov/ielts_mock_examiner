@@ -2,10 +2,14 @@ import os
 from typing import Any
 
 from ai_services.prompts import (
-    IELTS_EXAMINER_PROMPT,
-    IELTS_EXAMINER_PROMPT_PART1,
-    IELTS_EXAMINER_PROMPT_PART2,
-    IELTS_EXAMINER_PROMPT_PART3,
+    IELTS_CONVERSATION_PROMPT,
+    IELTS_CONVERSATION_PROMPT_PART1,
+    IELTS_CONVERSATION_PROMPT_PART2,
+    IELTS_CONVERSATION_PROMPT_PART3,
+    IELTS_EVALUATION_PROMPT,
+    IELTS_EVALUATION_PROMPT_PART1,
+    IELTS_EVALUATION_PROMPT_PART2,
+    IELTS_EVALUATION_PROMPT_PART3,
     IELTS_TASK_1_EXAMINER_PROMPT,
     IELTS_TASK_2_EXAMINER_PROMPT,
 )
@@ -392,6 +396,57 @@ Essay:
             self._normalize_inline_suggestions(parsed.get("inline_suggestions")),
         )
 
+    def evaluate_writing_quick_scores(
+        self,
+        task_type: str,
+        prompt: str,
+        essay: str,
+        topic_image_url: str | None = None,
+        topic_image_bytes: bytes | None = None,
+        topic_image_mime_type: str | None = None,
+    ) -> dict[str, Any]:
+        word_count = len([w for w in essay.split() if w.strip()])
+        task_type = (task_type or "task2").lower()
+        criteria_key = "ta" if task_type == "task1" else "tr"
+
+        system_prompt = IELTS_TASK_1_EXAMINER_PROMPT if task_type == "task1" else IELTS_TASK_2_EXAMINER_PROMPT
+
+        if not self.writing_model:
+            c1 = 6.0 if word_count >= (150 if task_type == "task1" else 250) else 5.0
+            c2, c3, c4 = 6.0, 6.0, 6.0
+            overall = average_score([c1, c2, c3, c4])
+            return {
+                "task_type": task_type,
+                "scores": {criteria_key: c1, "cc": c2, "lr": c3, "gra": c4, "overall_band": overall},
+                "word_count": word_count,
+            }
+
+        user_prompt = f"""
+{system_prompt}
+
+Evaluate this IELTS essay and return ONLY the scores.
+Return strict JSON only.
+
+Expected JSON schema:
+{{
+  "scores": {{"{criteria_key}": number, "cc": number, "lr": number, "gra": number, "overall_band": number}}
+}}
+
+Task type: {task_type}
+Prompt: {prompt}
+Topic image URL: {topic_image_url or ''}
+Image note: If an image is provided, use it when judging whether the response is on-topic and accurate.
+Essay:\n{essay}
+"""
+        parsed = (
+            self._generate_json_multimodal(user_prompt, topic_image_bytes, topic_image_mime_type)
+            if topic_image_bytes
+            else self._generate_json(user_prompt, task="writing")
+        )
+        parsed["word_count"] = word_count
+        parsed["task_type"] = task_type
+        return parsed
+
     def evaluate_writing(
         self,
         task_type: str,
@@ -500,15 +555,25 @@ Essay:\n{essay}
                 "coach_summary": "Fallback rewrite because Gemini is not configured.",
             }
 
+        band_specific_rule = ""
+        if target_band == 9:
+            band_specific_rule = "Aim for total flexibility, precise use of idiomatic language, and structures precise and accurate at all times."
+        elif target_band == 8:
+            band_specific_rule = "Aim for a wide resource flexibly used, skilful use of uncommon/idiomatic items, and a majority of sentences being error-free."
+        elif target_band == 7:
+            band_specific_rule = "Aim for flexible use of spoken discourse markers, some less common/idiomatic items with effective paraphrase, and frequent error-free sentences."
+
         user_prompt = f"""
 You are an IELTS speaking coach.
-Rewrite the candidate's response to the examiner's question so it can realistically score Band {target_band}.0.
+Rewrite the candidate's response to the examiner's question so it strictly aligns with the official IELTS Speaking Band {target_band}.0 descriptors.
 
-Rules:
-- Sound natural and conversational, appropriate for spoken English (not an academic essay).
-- Keep the same core ideas and context.
-- Improve vocabulary (idioms, less common items), grammar, and fluency/cohesion features.
-- Return strict JSON only.
+{band_specific_rule}
+
+CRITICAL RULES:
+1. DO NOT generate a completely new response. You MUST strictly preserve the candidate's exact core ideas, argument structure, and personal context.
+2. Only elevate the grammar, vocabulary, and cohesion of their original text to meet Band {target_band} standards.
+3. Sound natural and conversational, appropriate for spoken English (not an academic essay).
+4. Return strict JSON only.
 
 Expected JSON schema:
 {{
@@ -525,7 +590,7 @@ Expected JSON schema:
 }}
 
 Constraints:
-- Keep the rewrite close to the student's core meaning.
+- Keep the rewrite incredibly close to the student's core meaning.
 - Add 3-5 improvements only.
 - `enhanced_text` must appear verbatim in `rewritten_response`.
 - `original_text` must appear verbatim in original response.
@@ -572,16 +637,26 @@ Candidate's Original Response: {candidate_response}
                 "coach_summary": "Fallback rewrite because Gemini is not configured.",
             }
 
+        band_specific_rule = ""
+        if target_band == 9:
+            band_specific_rule = "Aim for full flexibility and precise use of vocabulary, minor errors being extremely rare, and paragraphing skilfully managed."
+        elif target_band == 8:
+            band_specific_rule = "Aim for logically sequenced ideas, wide resource fluently used with uncommon/idiomatic items, and majority of sentences being error-free."
+        elif target_band == 7:
+            band_specific_rule = "Aim for clear progression throughout, some less common items with style awareness, and frequent error-free sentences."
+
         criteria_key = "TA" if task_type == "task1" else "TR"
         user_prompt = f"""
 You are an IELTS writing coach.
-Rewrite the essay so it can realistically score Band {target_band}.0.
+Rewrite the essay so it strictly aligns with the official IELTS Writing Band {target_band}.0 descriptors.
 
-Rules:
-- Keep the same topic and context.
-- Do not add new core ideas outside the student's original scope.
-- Improve clarity, grammar, vocabulary, cohesion, and development only within the same argument/data context.
-- Return strict JSON only.
+{band_specific_rule}
+
+CRITICAL RULES:
+1. DO NOT generate a completely new essay. You MUST strictly preserve the candidate's exact core ideas, argument structure, and data selection.
+2. Only elevate the grammar, vocabulary, and cohesion of their original text to meet Band {target_band} standards.
+3. Do not add new core ideas outside the student's original scope.
+4. Return strict JSON only.
 
 Expected JSON schema:
 {{
@@ -598,7 +673,7 @@ Expected JSON schema:
 }}
 
 Constraints:
-- Keep the rewrite close to the student's core meaning. No major new ideas.
+- Keep the rewrite incredibly close to the student's core meaning. No major new ideas.
 - Add 4-8 improvements only.
 - `enhanced_text` must appear verbatim in `rewritten_essay`.
 - `original_text` must appear verbatim in original essay.
@@ -637,20 +712,29 @@ Original essay:
             "improvements": improvements,
         }
 
-    def _get_speaking_prompt(self, part: str) -> str:
+    def _get_speaking_conversation_prompt(self, part: str) -> str:
         if part == "1":
-            return IELTS_EXAMINER_PROMPT_PART1
+            return IELTS_CONVERSATION_PROMPT_PART1
         elif part == "2":
-            return IELTS_EXAMINER_PROMPT_PART2
+            return IELTS_CONVERSATION_PROMPT_PART2
         elif part == "3":
-            return IELTS_EXAMINER_PROMPT_PART3
-        return IELTS_EXAMINER_PROMPT
+            return IELTS_CONVERSATION_PROMPT_PART3
+        return IELTS_CONVERSATION_PROMPT
+
+    def _get_speaking_eval_prompt(self, part: str) -> str:
+        if part == "1":
+            return IELTS_EVALUATION_PROMPT_PART1
+        elif part == "2":
+            return IELTS_EVALUATION_PROMPT_PART2
+        elif part == "3":
+            return IELTS_EVALUATION_PROMPT_PART3
+        return IELTS_EVALUATION_PROMPT
 
     def generate_speaking_turn(self, conversation_history: list[dict[str, str]], part: str = "all") -> dict[str, Any]:
         if not self.speaking_model:
             return {"examiner_text": "Can you tell me more about that?", "part": "ongoing"}
 
-        system_prompt = self._get_speaking_prompt(part)
+        system_prompt = self._get_speaking_conversation_prompt(part)
         formatted_history = "\n".join([f"{item['role']}: {item['content']}" for item in conversation_history])
         prompt = f"""
 {system_prompt}
@@ -684,7 +768,7 @@ Conversation:
             return
 
         self._ensure_client()
-        system_prompt = self._get_speaking_prompt(part)
+        system_prompt = self._get_speaking_conversation_prompt(part)
         
         # Inject the latency optimization constraint
         system_prompt += "\n\nIMPORTANT: Always begin your response with a single short sentence of 8 words or fewer. This should be a direct acknowledgment or conversational opener. Then continue with your full response."
@@ -728,7 +812,7 @@ Conversation:
         if not self.speaking_model:
             raise RuntimeError("GEMINI_API_KEY is not configured")
 
-        system_prompt = self._get_speaking_prompt(part)
+        system_prompt = self._get_speaking_eval_prompt(part)
         formatted_history = "\n".join([f"{item['role']}: {item['content']}" for item in conversation_history])
         prompt = f"""
 {system_prompt}
@@ -797,11 +881,33 @@ Conversation:
             "corrections": parsed["corrections"]
         }
 
+    def evaluate_part1_transition(self, conversation_history: list[dict[str, str]]) -> bool:
+        if not self.speaking_model:
+            return False
+
+        formatted_history = "\n".join([f"{item['role']}: {item['content']}" for item in conversation_history[-8:]])
+        prompt = f"""
+You are an IELTS examiner routing system. Read the conversation history for Part 1.
+If the candidate has provided full, well-developed answers demonstrating good fluency and depth, OR if they have answered several questions already, we should move to Part 2.
+If their answers were extremely short and you still need more evidence, we should continue Part 1.
+
+Return strict JSON only:
+{{"move_to_part_2": true}} or {{"move_to_part_2": false}}
+
+Conversation:
+{formatted_history}
+"""
+        try:
+            parsed = self._generate_json(prompt, task="speaking")
+            return bool(parsed.get("move_to_part_2", False))
+        except Exception:
+            return False
+
     def generate_speaking_quick_scores(self, conversation_history: list[dict[str, str]], part: str = "all") -> dict[str, float]:
         if not self.speaking_model:
             raise RuntimeError("GEMINI_API_KEY is not configured")
 
-        system_prompt = self._get_speaking_prompt(part)
+        system_prompt = self._get_speaking_eval_prompt(part)
         formatted_history = "\n".join([f"{item['role']}: {item['content']}" for item in conversation_history])
         prompt = f"""
 {system_prompt}

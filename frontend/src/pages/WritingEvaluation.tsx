@@ -9,6 +9,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import Layout from '@/components/Layout';
 import { useNavigate, useParams } from 'react-router-dom';
 import { fetchJson } from '@/lib/backend';
+import { useThemeContext } from '@/contexts/ThemeContext';
 
 type CriterionKey = 'ta' | 'tr' | 'cc' | 'lr' | 'gra';
 
@@ -109,9 +110,15 @@ const toConciseCommentPoints = (raw: string): string[] => {
   return cleaned
     .split(/(?<=[.!?])\s+/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 4)
-    .map((line) => (line.length > 140 ? `${line.slice(0, 137)}...` : line));
+    .filter(Boolean);
+};
+
+const formatBandScore = (score: number): string => {
+  const floor = Math.floor(score);
+  const fraction = score - floor;
+  if (fraction < 0.5) return floor.toFixed(1);
+  if (fraction >= 0.7) return (floor + 1).toFixed(1);
+  return (floor + 0.5).toFixed(1);
 };
 
 const WritingEvaluation = () => {
@@ -135,8 +142,16 @@ const WritingEvaluation = () => {
   const [showAllByCriterion, setShowAllByCriterion] = useState<Partial<Record<CriterionKey, boolean>>>({});
   const [selectedImprovementKey, setSelectedImprovementKey] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { setStudyMode } = useThemeContext();
 
   useEffect(() => {
+    setStudyMode('writing');
+  }, [setStudyMode]);
+
+  useEffect(() => {
+    let pollingInterval: number | null = null;
+    let isMounted = true;
+
     const run = async () => {
       if (!id) {
         setError('Missing evaluation id');
@@ -149,6 +164,9 @@ const WritingEvaluation = () => {
           fetchJson<WritingResponse>(`/api/writing/evaluate/${id}`),
           fetchJson<BandEssaysResponse>(`/api/writing/evaluate/${id}/band-essays`),
         ]);
+        
+        if (!isMounted) return;
+
         setData(evaluationResponse);
         setBandStatus(bandsResponse.status || evaluationResponse.band_essays_status || 'pending');
         setBandEssays({
@@ -157,14 +175,37 @@ const WritingEvaluation = () => {
           '9': normalizeBandEntry(bandsResponse.essays?.['9']),
         });
         setBandError(bandsResponse.error || '');
+
+        // If examiner_comments is empty, it means the detailed evaluation is still processing
+        if (!evaluationResponse.examiner_comments) {
+          pollingInterval = window.setInterval(async () => {
+            try {
+              const updatedData = await fetchJson<WritingResponse>(`/api/writing/evaluate/${id}`, { cache: 'no-store' });
+              if (!isMounted) return;
+              
+              if (updatedData.examiner_comments) {
+                setData(updatedData);
+                if (pollingInterval) clearInterval(pollingInterval);
+              }
+            } catch (e) {
+              // Ignore polling errors
+            }
+          }, 3000);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load evaluation');
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Failed to load evaluation');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
-
     run();
+
+    return () => {
+      isMounted = false;
+      if (pollingInterval) clearInterval(pollingInterval);
+    };
   }, [id]);
 
   const scoreRows = useMemo(() => {
@@ -530,6 +571,8 @@ const WritingEvaluation = () => {
     }
   };
 
+  const isProcessingEvaluation = data && !data.examiner_comments;
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8 relative">
@@ -546,6 +589,16 @@ const WritingEvaluation = () => {
             <Button variant="outline" onClick={() => navigate('/writing')}>Back to Writing</Button>
           </div>
 
+          {isProcessingEvaluation && (
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8 bg-primary/10 border border-primary/20 p-4 rounded-xl flex items-center gap-4">
+              <Loader2 className="h-6 w-6 text-primary animate-spin shrink-0" />
+              <div>
+                <h3 className="font-semibold text-foreground">Detailed Evaluation in Progress</h3>
+                <p className="text-sm text-muted-foreground">Your score is ready! We are generating detailed feedback and corrections in the background.</p>
+              </div>
+            </motion.div>
+          )}
+
           {loading && <p className="text-muted-foreground">Loading evaluation...</p>}
           {error && <p className="text-destructive">{error}</p>}
 
@@ -553,7 +606,7 @@ const WritingEvaluation = () => {
             <>
               <div className="text-center mb-8">
                 <div className="inline-flex flex-col items-center p-6 rounded-2xl bg-primary/10 glow">
-                  <p className="text-5xl font-bold text-primary">{Number(data.scores.overall_band || 0).toFixed(1)}</p>
+                  <p className="text-5xl font-bold text-primary">{formatBandScore(Number(data.scores.overall_band || 0))}</p>
                   <p className="text-sm text-muted-foreground mt-1 font-medium">Overall Band Score</p>
                 </div>
               </div>
@@ -561,7 +614,7 @@ const WritingEvaluation = () => {
               <div className="grid xl:grid-cols-[1.5fr_1fr] gap-6">
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {scoreRows.map((row) => (
+                  {!isProcessingEvaluation && scoreRows.map((row) => (
                     <Card key={row.key} className="bg-card">
                       <CardContent className="py-4 flex flex-col items-center justify-center space-y-2 text-center h-full">
                         <p className="text-sm font-medium text-muted-foreground">{row.label}</p>
@@ -574,6 +627,13 @@ const WritingEvaluation = () => {
                 <Card>
                   <CardHeader><CardTitle>Detailed Feedback (Expand To See Exact Problems)</CardTitle></CardHeader>
                   <CardContent>
+                    {isProcessingEvaluation ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-center border-2 border-dashed border-border rounded-xl">
+                        <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
+                        <p className="text-foreground font-medium">Analyzing your essay...</p>
+                        <p className="text-sm text-muted-foreground mt-1">Feedback will appear here shortly.</p>
+                      </div>
+                    ) : (
                     <Accordion
                       type="single"
                       collapsible
@@ -633,6 +693,7 @@ const WritingEvaluation = () => {
                         );
                       })}
                     </Accordion>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -673,16 +734,25 @@ const WritingEvaluation = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {!!conciseCommentPoints.length && (
-                      <ul className="space-y-2">
-                        {conciseCommentPoints.map((point, idx) => (
-                          <li key={`comment-${idx}`} className="text-sm rounded-md bg-primary/5 border border-primary/15 px-3 py-2">
-                            {point}
-                          </li>
-                        ))}
-                      </ul>
+                    {isProcessingEvaluation ? (
+                      <div className="flex flex-col items-center justify-center py-6 text-center">
+                        <Loader2 className="h-6 w-6 text-primary animate-spin mb-2" />
+                        <p className="text-sm text-muted-foreground">Generating comments...</p>
+                      </div>
+                    ) : (
+                      <>
+                        {!!conciseCommentPoints.length && (
+                          <ul className="space-y-2">
+                            {conciseCommentPoints.map((point, idx) => (
+                              <li key={`comment-${idx}`} className="text-sm rounded-md bg-primary/5 border border-primary/15 px-3 py-2 text-foreground">
+                                {point}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {!conciseCommentPoints.length && <p className="text-sm text-muted-foreground">No examiner comments were returned.</p>}
+                      </>
                     )}
-                    {!conciseCommentPoints.length && <p className="text-sm text-muted-foreground">No examiner comments were returned.</p>}
 
                     {!!data.corrections?.length && (
                       <div className="mt-4 space-y-2">

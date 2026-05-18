@@ -2,6 +2,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import BasePermission, IsAuthenticated
+import threading
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -9,6 +10,34 @@ from ai_services.gemini_client import GeminiClient
 from ai_services.utils import average_score
 from writing.models import WritingEvaluation, WritingTopic
 from writing.serializers import WritingEvaluateRequestSerializer, WritingTopicSerializer
+
+
+def _run_detailed_writing_evaluation(evaluation_id: int, task_type: str, prompt: str, essay: str, topic_image_url: str | None, topic_image_bytes: bytes | None, topic_image_mime_type: str | None):
+    try:
+        gemini = GeminiClient()
+        result = gemini.evaluate_writing(
+            task_type=task_type,
+            prompt=prompt,
+            essay=essay,
+            topic_image_url=topic_image_url,
+            topic_image_bytes=topic_image_bytes,
+            topic_image_mime_type=topic_image_mime_type,
+        )
+        # Re-fetch the evaluation to ensure we have the latest instance
+        evaluation = WritingEvaluation.objects.get(id=evaluation_id)
+        evaluation.examiner_comments = result.get("examiner_comments", "")
+        evaluation.corrections = _safe_json_list(result.get("corrections", []))
+        evaluation.criteria_feedback = _safe_json_dict(result.get("criteria_feedback"))
+        evaluation.inline_suggestions = _safe_json_list(result.get("inline_suggestions", []))
+        evaluation.save()
+    except Exception as exc:
+        try:
+            evaluation = WritingEvaluation.objects.get(id=evaluation_id)
+            evaluation.examiner_comments = f"Detailed evaluation failed: {exc}"
+            evaluation.save()
+        except Exception:
+            pass
+
 
 
 class IsStaffOrSuperuser(BasePermission):
@@ -99,7 +128,7 @@ class WritingEvaluateAPIView(APIView):
 
         gemini = GeminiClient()
         try:
-            result = gemini.evaluate_writing(
+            result = gemini.evaluate_writing_quick_scores(
                 task_type=data["task_type"],
                 prompt=data["prompt"],
                 essay=data["essay"],
@@ -135,14 +164,28 @@ class WritingEvaluateAPIView(APIView):
             essay_text=data["essay"],
             topic_image_url=topic_image_url,
             scores=normalized_scores,
-            examiner_comments=result.get("examiner_comments", ""),
-            corrections=_safe_json_list(result.get("corrections", [])),
-            criteria_feedback=_safe_json_dict(result.get("criteria_feedback")),
-            inline_suggestions=_safe_json_list(result.get("inline_suggestions", [])),
+            examiner_comments="", # Empty string indicates it's processing
+            corrections=[],
+            criteria_feedback={},
+            inline_suggestions=[],
             word_count=int(result.get("word_count", 0)),
             band_essays={},
             band_essays_status="pending",
         )
+
+        # Start detailed evaluation in the background
+        threading.Thread(
+            target=_run_detailed_writing_evaluation,
+            args=(
+                evaluation.id,
+                data["task_type"],
+                data["prompt"],
+                data["essay"],
+                topic_image_url,
+                topic_image_bytes,
+                topic_image_mime_type,
+            )
+        ).start()
 
         return Response(
             {
