@@ -9,6 +9,7 @@ urlpatterns = [
     path("api/auth/", include("accounts.urls")),
     path("api/writing/", include("writing.urls")),
     path("api/speaking/", include("speaking_app.urls")),
+    path("api/exams/", include("exams.urls")),
 ]
 
 if settings.DEBUG:

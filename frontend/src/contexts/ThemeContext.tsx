@@ -1,6 +1,9 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-type StudyMode = 'writing' | 'speaking';
+type StudyMode = 'writing' | 'speaking' | 'reading' | 'listening';
+
+// 'writing' is the default palette on bare :root, so it has no class of its own.
+const STUDY_MODE_CLASSES = ['speaking', 'reading', 'listening'] as const;
 type Theme = 'light' | 'dark';
 
 interface ThemeContextType {
@@ -24,10 +27,12 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (studyMode === 'speaking') {
-      root.classList.add('speaking');
-    } else {
-      root.classList.remove('speaking');
+    // Remove every mode class before adding the current one, otherwise moving
+    // writing -> speaking -> reading leaves 'speaking' behind and the two
+    // palettes cascade together.
+    root.classList.remove(...STUDY_MODE_CLASSES);
+    if (studyMode !== 'writing') {
+      root.classList.add(studyMode);
     }
   }, [studyMode]);
 

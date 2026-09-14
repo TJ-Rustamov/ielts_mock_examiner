@@ -6,11 +6,12 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.decorators import api_view
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.models import AIConfiguration, SpeakingConfiguration, SpeakingQuestion
+from core.permissions import IsStaffOrSuperuser
 from core.serializers import (
     AIConfigurationSerializer,
     AdminUserCreateSerializer,
@@ -39,12 +40,6 @@ MODEL_CATALOG = {
         "gpt-5-nano",
     ],
 }
-
-
-class IsStaffOrSuperuser(BasePermission):
-    def has_permission(self, request, view):
-        user = request.user
-        return bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
 
 
 def _available_kokoro_voices() -> list[str]:

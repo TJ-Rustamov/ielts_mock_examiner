@@ -1,0 +1,29 @@
+# Reading & Listening import pipeline (PDF -> questions).
+# Split out like requirements-voice.txt so a deploy that never runs the
+# importer can skip roughly 150MB of wheels.
+
+# Text WITH per-word bounding boxes, page rendering at any DPI, built-in
+# JPEG-2000 decoding (Cambridge 20 is pure JPX and Pillow's JPX path needs
+# openjpeg), /Rotate normalisation, and clipped region export for figure crops.
+# Replaces pdfplumber + pypdf + pdf2image/poppler + Pillow's JPX handling.
+pymupdf>=1.24
+
+# OCR for books with no text layer. Chosen over pytesseract because it is
+# pip-only - the PP-OCRv4 ONNX weights ship inside the wheel - so it behaves
+# identically on a bare Windows dev host and in python:3.12-slim, with no
+# system binary and no language-data volume.
+rapidocr-onnxruntime>=1.3
+
+# Deskew / threshold for the ~150 DPI Cambridge 20 scans. Ships with rapidocr;
+# pinned here explicitly because the preprocessing bench uses it directly.
+# -headless keeps GUI libs out of the container.
+opencv-python-headless>=4.9
+
+# Fuzzy matching for the IMPORTER ONLY - never for marking answers. Used to
+# match a garbled instruction line against the boilerplate catalogue, for
+# dictionary-based OCR correction, and to align key numbers to question numbers.
+rapidfuzz>=3.0
+
+# Validates the ImportJob payload at every stage boundary, so a bad stage fails
+# where it happens rather than at publish time.
+pydantic>=2.0

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import io
 import os
 import re
@@ -5,12 +7,30 @@ import tempfile
 import wave
 from functools import cached_property
 
-import numpy as np
-from faster_whisper import WhisperModel
+# Installed only when the image is built with INSTALL_VOICE=true. See the note
+# in tts_client.py: eager imports here broke startup for a voice-less image.
+try:
+    import numpy as np
+    from faster_whisper import WhisperModel
+except ImportError:  # pragma: no cover - depends on build flags
+    np = None
+    WhisperModel = None
+
+VOICE_EXTRAS_AVAILABLE = np is not None and WhisperModel is not None
+
+
+class MissingVoiceExtras(RuntimeError):
+    """Raised when STT is used in an image built without the voice extras."""
 
 
 class FasterWhisperClient:
     def __init__(self) -> None:
+        if not VOICE_EXTRAS_AVAILABLE:
+            raise MissingVoiceExtras(
+                "Speech-to-text needs the voice extras (numpy, faster-whisper). "
+                "This image was built with INSTALL_VOICE=false; rebuild with "
+                "INSTALL_VOICE=true to enable speaking."
+            )
         self.model_size = os.getenv("WHISPER_MODEL_SIZE", "base")
         self.device = os.getenv("WHISPER_DEVICE", "cpu")
         self.compute_type = os.getenv("WHISPER_COMPUTE_TYPE", "int8")

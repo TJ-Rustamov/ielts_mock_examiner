@@ -1,13 +1,14 @@
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 import threading
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai_services.gemini_client import GeminiClient
 from ai_services.utils import average_score
+from core.permissions import IsStaffOrSuperuser
 from writing.models import WritingEvaluation, WritingTopic
 from writing.serializers import WritingEvaluateRequestSerializer, WritingTopicSerializer
 
@@ -38,12 +39,6 @@ def _run_detailed_writing_evaluation(evaluation_id: int, task_type: str, prompt:
         except Exception:
             pass
 
-
-
-class IsStaffOrSuperuser(BasePermission):
-    def has_permission(self, request, view):
-        user = request.user
-        return bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
 
 
 def _safe_json_list(value):
