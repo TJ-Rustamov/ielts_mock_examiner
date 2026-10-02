@@ -379,11 +379,16 @@ _SOURCE_LABELS = {
 #: key pages) and nothing else may override it. On a scan with an embedded
 #: layer that layer still leads - it is what produced those 40/40s - and the
 #: column re-read fills what it withheld. On a scan this importer read itself,
-#: the column-by-column read leads: it cannot merge across a gutter.
+#: the page's own lines read row by row lead: on Cambridge 19 they came out one
+#: clean row per answer, where the narrow column strips made OCR stack a run of
+#: numbers into one box. Rows welded across a gutter are refused by the row
+#: parser, and the column read fills exactly those - and is the cross-check
+#: for everything else. The flat scanner comes last: on a page whose sidebar
+#: sits beside the answers it reads straight through them.
 _READ_ORDER = {
     KEY_TEXT: ("layer",),
     KEY_EMBEDDED: ("layer", "columns", "layer_rows"),
-    KEY_OCR: ("columns", "layer", "layer_rows"),
+    KEY_OCR: ("layer_rows", "columns", "layer"),
 }
 
 
@@ -482,7 +487,52 @@ def _reread_key_pages(key_pages, page_sources, page_start, path, ocr_engine,
 
 
 def _line_rows(lines, page_of) -> list:
-    """Key rows from page lines, with a column index estimated per page."""
+    """Key rows from page lines, with a column index estimated per page.
+
+    Where the question numbers show two or more columns, each line is first
+    cut at the column dividers. Whole-page OCR on Cambridge 19 read "2 cotton"
+    and the "B" level with it in the next column as one line; a lone letter
+    is not a question number, so nothing downstream could tell it had been
+    welded on. Cutting by position can.
+    """
+    from exams import keysheet
+
+    by_page: dict = {}
+    for line in lines:
+        by_page.setdefault(page_of(line), []).append(line)
+
+    split_rows: list = []
+    unsplit: list = []
+    for page, page_lines in by_page.items():
+        words = [w for line in page_lines for w in line.words]
+        width = max((w.x1 for w in words), default=0.0) * 1.05
+        dividers = keysheet.number_dividers(words, width) if words else []
+        if not dividers:
+            unsplit.extend(page_lines)
+            continue
+        edges = [float("-inf"), *dividers, float("inf")]
+        for line in page_lines:
+            for column, (left, right) in enumerate(zip(edges[:-1], edges[1:])):
+                part = [w for w in line.words if left <= w.x0 < right]
+                if not part:
+                    continue
+                split_rows.append(keygrammar.KeyRow(
+                    text=" ".join(" ".join(w.text for w in part).split()),
+                    confidence=min(w.confidence for w in part),
+                    page=page,
+                    bbox=(min(w.x0 for w in part), min(w.y0 for w in part),
+                          max(w.x1 for w in part), max(w.y1 for w in part)),
+                    column=column,
+                ))
+    # Column by column, top to bottom: the order a reader takes.
+    split_rows.sort(key=lambda row: (row.page or 0, row.column, row.bbox[1]))
+    rows = split_rows + _unsplit_rows(unsplit, page_of)
+    rows.sort(key=lambda row: row.page or 0)  # stable: keeps each page's order
+    return rows
+
+
+def _unsplit_rows(lines, page_of) -> list:
+    """Rows for pages whose columns could not be found: one row per line."""
     by_page: dict = {}
     for line in lines:
         by_page.setdefault(page_of(line), []).append(line)
@@ -680,7 +730,8 @@ def _bind_module_key(key, module_payload, lines, page_of, page_sources,
 
 
 _KEY_TEST = re.compile(r"^test\s*(\d+)\s*$", re.IGNORECASE)
-_KEY_SKILL = re.compile(r"^(listening|reading)\b", re.IGNORECASE)
+# Not "Listening and Reading answer keys", the running header of every key page.
+_KEY_SKILL = re.compile(r"^(listening|reading)\b(?!\s*and\b)", re.IGNORECASE)
 _KEY_COMBINED = re.compile(r"^test\s*(\d+)\s*\w*?\s*(listening|reading)\b", re.IGNORECASE)
 
 
@@ -712,8 +763,13 @@ def _split_key_items(items, page_of=None, start_states=None):
         head = text.split(" - ")[0].strip()
         match = match_anchor(_KEY_TEST, head)
         if match:
-            current_test = int(match.group(1))
-            current_skill = None
+            number = int(match.group(1))
+            # "TEST 1" also runs at the top of the page. Reading order can put
+            # it after the skill heading, or a column re-read can meet it
+            # partway down; the same test number again is not a new section.
+            if number != current_test:
+                current_skill = None
+            current_test = number
             continue
         # "TEST 1 LISTENING" and "TEST 1 I READING" both occur.
         combined = match_anchor(_KEY_COMBINED, text)

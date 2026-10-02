@@ -221,6 +221,12 @@ def _test_number(text: str) -> int | None:
     return int(token) if token.isdigit() else _SPELLED.get(token)
 
 
+def _is_contents_page(lines: list[Line]) -> bool:
+    numbers = {_test_number(" ".join(line.text.split())) for line in lines}
+    numbers.discard(None)
+    return len(numbers) >= 2
+
+
 def segment(pages: dict[int, list[Line]]) -> Document:
     """Walk the page/line stream and build the structure.
 
@@ -240,15 +246,30 @@ def segment(pages: dict[int, list[Line]]) -> Document:
         nonlocal group
         group = None
 
+    def content_started() -> bool:
+        return any(m.sections for t in document.tests for m in t.modules.values())
+
     for page_number in sorted(pages):
+        # A contents page lists every test and every back-matter heading. On
+        # a typeset page each entry carries its page number ("Audioscripts
+        # 99"), so none of them matches an anchor; OCR often splits the
+        # numbers off into a column of their own, and then "Audioscripts" on
+        # page 3 started the back matter and swallowed the whole book. A page
+        # naming two or more tests before any test content is the contents.
+        if back_matter_key is None and not content_started() \
+                and _is_contents_page(pages[page_number]):
+            continue
+
         for line in pages[page_number]:
             text = " ".join(line.text.split())
             if not text:
                 continue
 
             # --- back matter: everything after this belongs to the book, not
-            # --- to a test, so close the current test out entirely.
-            matter = match_anchor(_BACK_MATTER, text)
+            # --- to a test, so close the current test out entirely. Only once
+            # --- a test has real content: the Introduction mentions "answer
+            # --- keys" and "audioscripts" too.
+            matter = match_anchor(_BACK_MATTER, text) if content_started() else None
             if matter:
                 back_matter_key = next(
                     key for key, value in matter.groupdict().items() if value

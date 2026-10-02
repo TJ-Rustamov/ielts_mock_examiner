@@ -85,20 +85,21 @@ class ReadPriorityTests(unittest.TestCase):
         self.assertIsNone(keys[1]["evidence"]["confidence"])
         self.assertEqual(module["key_reads"]["reads"], ["layer", "layer_rows"])
 
-    def test_scanned_page_prefers_the_column_reading(self):
+    def test_scanned_page_reads_rows_and_the_columns_fill_welded_ones(self):
         result, module, keys = run_keys(
-            # Whole-page OCR welded a column row into Q3.
+            # Whole-page OCR welded a row from the next column onto Q3.
             key_lines("1 mining", "2 education", "3 notes 4 B"),
             pdfsource.OCR,
             column_rows=column("1 mining", "2 education", "3 notes", "4 B"),
         )
-        self.assertEqual(module["key_reads"]["primary"], "columns")
+        self.assertEqual(module["key_reads"]["primary"], "layer_rows")
         self.assertEqual(keys[3]["accepted"], ["notes"])
+        self.assertEqual(keys[3]["evidence"]["read"], "columns")
         self.assertEqual(keys[4]["accepted"], ["B"])
         self.assertEqual(keys[1]["evidence"]["agreement"], "agree")
         self.assertFalse(keys[1]["evidence"]["independent"])
         self.assertEqual(keys[1]["evidence"]["crop"]["page"], PAGE)
-        self.assertEqual(keys[1]["evidence"]["confidence"], 0.96)
+        self.assertEqual(keys[1]["evidence"]["confidence"], 0.97)
 
     def test_embedded_layer_leads_and_the_column_reading_fills_gaps(self):
         result, module, keys = run_keys(
@@ -125,6 +126,29 @@ class ReadPriorityTests(unittest.TestCase):
         self.assertIn(4, module["key_reads"]["disagreements"])
         self.assertFalse(module["answer_key_reliable"])
         self.assertEqual(keys[4]["check"]["status"], "check")
+
+
+class WeldedRowTests(unittest.TestCase):
+    """Whole-page OCR joins a row to the one level with it in the next column."""
+
+    def test_a_letter_welded_from_the_next_column_is_cut_off(self):
+        lines = []
+        for index in range(8):
+            y = 100 + index * 14
+            left = [Word(str(index + 1), 40, y, 48, y + 10), Word(f"word{index + 1}", 60, y, 110, y + 10)]
+            right = [Word(str(index + 21), 300, y, 312, y + 10), Word("B", 320, y, 328, y + 10)]
+            if index == 1:
+                # "2 word2" welded to a bare set letter in the other column.
+                right = [Word("B", 320, y, 328, y + 10)]
+            lines.append(Line(left + right))
+        rows = pipeline._line_rows(lines, page_of=lambda line: PAGE)
+        texts = [row.text for row in rows]
+        self.assertIn("2 word2", texts)
+        self.assertIn("B", texts)
+        self.assertEqual({row.column for row in rows if row.text.startswith("2")}, {0, 1})
+        parsed = keygrammar.parse_answer_rows(rows, total=28)
+        self.assertEqual(parsed.keys[2].accepted, ("word2",))
+        self.assertEqual(parsed.keys[23].accepted, ("B",))
 
 
 class SelfCheckTests(unittest.TestCase):

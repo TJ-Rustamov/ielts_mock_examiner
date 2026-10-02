@@ -240,3 +240,21 @@ class OcrSpacingTests(unittest.TestCase):
         module = segment(pages).tests[0].modules[LISTENING]
         groups = module.sections[0].groups
         self.assertEqual((groups[0].first_question, groups[0].last_question), (21, 22))
+
+
+class ContentsPageTests(unittest.TestCase):
+    """OCR splits a contents page's page numbers off into their own column."""
+
+    def test_contents_page_does_not_start_the_back_matter(self):
+        pages = {
+            3: page("Contents", "Test 1", "Test 2", "Audioscripts",
+                    "Listening and Reading answer keys 120", "Acknowledgements"),
+            4: page("Introduction", "The answer keys are at the back.", "Audioscripts"),
+            9: page("Test 1", "LISTENING", "PART 1 Questions 1-10",
+                    "Complete the notes below.", "1 ......"),
+            90: page("Audioscripts", "TEST 1", "PART 1", "WOMAN: Hello."),
+        }
+        document = segment(pages)
+        module = document.tests[0].modules[LISTENING]
+        self.assertEqual(module.sections[0].groups[0].first_question, 1)
+        self.assertEqual([line.text for line in document.back_matter["scripts"]][:1], ["TEST 1"])

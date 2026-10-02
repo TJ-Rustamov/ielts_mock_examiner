@@ -548,6 +548,9 @@ _COMPACT_SIDEBAR = re.compile(
 )
 
 
+#: Three or more digits with no letters, leading a row.
+_DIGIT_RUN = re.compile(r"^\s*\d{3,}(?:\s|$)")
+
 #: A bare one- or two-digit number inside an answer ("10/ten" and "13th" are
 #: not bare).
 _STANDALONE_NUMBER = re.compile(r"(?<![\w./&-])(\d{1,2})(?![\w./-])")
@@ -723,6 +726,12 @@ def parse_answer_rows(
     for row, text, number, real_digit, rest in parsed:
         if _is_heading_row(text) or _is_sidebar_row(text):
             current = None
+            continue
+        if _DIGIT_RUN.match(text):
+            # A stack of question numbers OCR read as one box ("23456789"):
+            # it is nobody's answer, and whatever follows it is not either.
+            current = None
+            dropped += 1
             continue
 
         accept = False

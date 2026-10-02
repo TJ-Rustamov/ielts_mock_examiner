@@ -2,7 +2,7 @@
 
 Why this exists rather than reading the key out of the book's PDF: Cambridge
 typesets its key pages in columns that sometimes interleave when the PDF text is
-flattened — Cambridge 21 page 120 puts the Part 3 option letters inside the
+flattened â€” Cambridge 21 page 120 puts the Part 3 option letters inside the
 Part 1 answers. Every ordering heuristic tried against that page either failed
 on it or regressed the seven pages that already worked, and the cost of being
 wrong is a wrong key that silently mis-marks every future candidate.
@@ -22,6 +22,7 @@ and ``Module.blocking_problems`` refuses to publish until they have.
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass, field
 
 from exams import keygrammar
@@ -192,7 +193,11 @@ def estimate_dividers(
     at = estimate_divider([(b[0] - left, b[1] - left) for b in inside], width)
     if at is None:
         return []
-    at += left
+    return _split_at(boxes, left, right, at + left, inside, max_columns)
+
+
+def _split_at(boxes, left, right, at, inside, max_columns) -> list[float]:
+    """Accept a divider at `at` if both sides are real key columns; recurse."""
     left_side = [b for b in inside if b[0] <= at]
     right_side = [b for b in inside if b[0] > at]
     if any(b[2] for b in inside):
@@ -209,6 +214,43 @@ def estimate_dividers(
         found.extend(extra)
         remaining -= len(extra)
     return sorted(found)
+
+
+_NUMBER_TOKEN = re.compile(r"^(\d{1,2})(?:&\d{1,2})*$")
+
+
+def number_dividers(words, page_width: float, total: int = 40) -> list[float]:
+    """Column dividers from where the question numbers sit.
+
+    The fallback for a page whose detected lines run across the gutter - OCR
+    read "1 69 / ten   21&22 IN EITHER ORDER" as one line, so every line box
+    starts at the left margin and the line-based search finds nothing. The
+    individual number tokens still carry their own x position, and the
+    numbers of each column line up on its margin.
+    """
+    xs = []
+    for word in words:
+        match = _NUMBER_TOKEN.match(word.text.strip())
+        if match and 1 <= int(match.group(1)) <= total:
+            xs.append(word.x0)
+    if len(xs) < 2 * MIN_NUMBERED_ROWS or page_width <= 0:
+        return []
+    xs.sort()
+    # Columns: runs of number positions closer than this to each other.
+    join = page_width * 0.05
+    clusters: list[list[float]] = [[xs[0]]]
+    for x in xs[1:]:
+        if x - clusters[-1][-1] <= join:
+            clusters[-1].append(x)
+        else:
+            clusters.append([x])
+    # A column has many numbers; a number inside an answer is a stray.
+    columns = [c for c in clusters if len(c) >= MIN_NUMBERED_ROWS * 2]
+    if len(columns) < 2:
+        return []
+    columns = columns[:MAX_COLUMNS]
+    # Cut just left of each later column's numbers.
+    return [max(c[0] - page_width * 0.015, 0.0) for c in columns[1:]]
 
 
 def _recognise(engine, image, page_width: float, page_height: float, preprocess: bool):
@@ -278,7 +320,11 @@ def ocr_columns(
     try:
         if words is None:
             words, _confidence = _recognise(engine, array, page_width, page_height, False)
-        dividers = estimate_dividers(line_boxes(words), 0.0, page_width)
+        # Number positions first: they still show the columns when OCR has
+        # run whole rows across the gutter. Line edges otherwise.
+        dividers = number_dividers(words, page_width) or estimate_dividers(
+            line_boxes(words), 0.0, page_width
+        )
     except Exception:  # pragma: no cover - engine/runtime dependent
         return read
     read.dividers = dividers
