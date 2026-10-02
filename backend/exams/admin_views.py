@@ -136,7 +136,7 @@ class ImportJobPublishAPIView(APIView):
         job = get_object_or_404(ImportJob, pk=job_id)
         if not job.payload:
             return _error("empty_payload", "this job has no parsed content")
-        result = publish_payload(job.payload, job.book_slug)
+        result = publish_payload(job.payload, job.book_slug, source_pdf=job.source_file.path)
         job.status = ImportJob.PUBLISHED
         job.book = result.book
         job.save(update_fields=["status", "book", "updated_at"])
@@ -265,7 +265,7 @@ class AnswerSheetAPIView(APIView):
 
 def _clean_answer_grid(answers: dict, total: int) -> tuple[dict, list[str]]:
     """Validate and normalise the grid the admin submits."""
-    from exams.keygrammar import expand_alternatives
+    from exams.keygrammar import detect_kind, expand_alternatives
 
     cleaned: dict[str, dict] = {}
     problems: list[str] = []
@@ -284,7 +284,10 @@ def _clean_answer_grid(answers: dict, total: int) -> tuple[dict, list[str]]:
             if not raw:
                 continue
             accepted = list(expand_alternatives(raw))
-            entry = {"kind": "text", "accepted": accepted}
+            # Infer the kind rather than defaulting to text: a TRUE/FALSE key
+            # stored as text would reject a candidate's "T", and a letter stored
+            # as text would reject nothing it should but also flag nothing.
+            entry = {"kind": detect_kind(tuple(accepted)), "accepted": accepted}
         elif isinstance(value, dict):
             accepted = value.get("accepted") or []
             if isinstance(accepted, str):
@@ -293,7 +296,7 @@ def _clean_answer_grid(answers: dict, total: int) -> tuple[dict, list[str]]:
             if not accepted:
                 continue
             entry = {
-                "kind": value.get("kind") or "text",
+                "kind": value.get("kind") or detect_kind(tuple(accepted)),
                 "accepted": accepted,
                 "word_limit": value.get("word_limit") or "",
                 "set_id": value.get("set_id"),
@@ -412,6 +415,14 @@ def guess_audio_slot(filename: str) -> tuple[int | None, int | None]:
 class AudioUploadAPIView(APIView):
     permission_classes = ADMIN
     parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request):
+        assets = AudioAsset.objects.select_related("book")
+        book_slug = request.query_params.get("book")
+        if book_slug:
+            assets = assets.filter(book__slug=book_slug)
+        return Response({"assets": AudioAssetSerializer(
+            assets, many=True, context={"request": request}).data})
 
     def post(self, request):
         book_slug = (request.data.get("book_slug") or "").strip()

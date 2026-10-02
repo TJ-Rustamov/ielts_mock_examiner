@@ -72,6 +72,10 @@ const buildChartData = (rows: SessionCard[], key: 'writing' | 'speaking') => {
 
 const Dashboard = () => {
   const { studyMode: activeView, setStudyMode: setActiveView } = useThemeContext();
+  // The study mode is shared app-wide and can now be reading or listening, but this
+  // page only has Writing and Speaking views. Anything else shows Writing rather
+  // than silently falling through to the Speaking data.
+  const dashboardView: 'writing' | 'speaking' = activeView === 'speaking' ? 'speaking' : 'writing';
   const navigate = useNavigate();
 
   const [writingSessions, setWritingSessions] = useState<SessionCard[]>([]);
@@ -133,14 +137,14 @@ const Dashboard = () => {
     return speakingSessions.filter(s => (s as any).rawPart === speakingFilter || (s as any).rawPart === 'all');
   }, [speakingSessions, speakingFilter]);
 
-  const sessions = activeView === 'writing' ? writingSessions : filteredSpeakingSessions;
+  const sessions = dashboardView === 'writing' ? writingSessions : filteredSpeakingSessions;
   const safeScores = sessions.map((s) => s.score).filter((s) => Number.isFinite(s) && s > 0);
   const rawAvg = safeScores.length ? (safeScores.reduce((a, s) => a + s, 0) / safeScores.length) : 0;
   const avgScore = safeScores.length ? formatBandScore(rawAvg).toFixed(1) : '0.0';
   const bestScore = safeScores.length ? Math.max(...safeScores).toFixed(1) : '0.0';
   const improvement = safeScores.length >= 2 ? `+${(safeScores[0] - safeScores[safeScores.length - 1]).toFixed(1)}` : '+0.0';
 
-  const chartData = useMemo(() => buildChartData(sessions, activeView), [sessions, activeView]);
+  const chartData = useMemo(() => buildChartData(sessions, dashboardView), [sessions, dashboardView]);
 
   const stats = [
     { label: 'Total Sessions', value: sessions.length, icon: BookOpen, color: 'from-primary/20 to-primary/5' },
@@ -170,10 +174,10 @@ const Dashboard = () => {
                 key={view}
                 onClick={() => setActiveView(view)}
                 className={`relative px-5 py-2.5 rounded-lg text-sm font-medium transition-colors capitalize ${
-                  activeView === view ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                  dashboardView === view ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {activeView === view && (
+                {dashboardView === view && (
                   <motion.div layoutId="dashboardTab" className="absolute inset-0 bg-primary rounded-lg glow-sm" transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }} />
                 )}
                 <span className="relative z-10 flex items-center gap-2">
@@ -205,7 +209,7 @@ const Dashboard = () => {
                     </div>
                     <div>
                       <motion.p
-                        key={`${stat.value}-${activeView}`}
+                        key={`${stat.value}-${dashboardView}`}
                         initial={{ opacity: 0, y: 5 }}
                         animate={{ opacity: 1, y: 0 }}
                         className="text-2xl font-bold text-foreground"
@@ -251,7 +255,7 @@ const Dashboard = () => {
                       boxShadow: '0 10px 30px -10px hsl(var(--primary) / 0.1)',
                     }}
                   />
-                  <Area type="monotone" dataKey={activeView} stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#colorGrad)" dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 5 }} activeDot={{ r: 7, strokeWidth: 0 }} />
+                  <Area type="monotone" dataKey={dashboardView} stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#colorGrad)" dot={{ fill: 'hsl(var(--primary))', strokeWidth: 2, r: 5 }} activeDot={{ r: 7, strokeWidth: 0 }} />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -269,7 +273,7 @@ const Dashboard = () => {
             <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-normal">{sessions.length} total</span>
           </h2>
           
-          {activeView === 'speaking' && (
+          {dashboardView === 'speaking' && (
             <div className="flex items-center gap-2 text-sm bg-muted/50 p-1 rounded-lg">
               {(['all', '1', '2', '3'] as const).map(filter => (
                 <button
@@ -292,7 +296,7 @@ const Dashboard = () => {
         {!loading && sessions.length === 0 && <p className="text-muted-foreground">No sessions yet. Start a test to see results here.</p>}
 
         <AnimatePresence mode="wait">
-          <motion.div key={activeView} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="grid gap-3">
+          <motion.div key={dashboardView} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="grid gap-3">
             {sessions.map((session, i) => (
               <motion.div
                 key={session.id}
@@ -308,7 +312,7 @@ const Dashboard = () => {
                   <CardContent className="flex items-center justify-between py-4">
                     <div className="flex items-center gap-4">
                       <div className="p-2.5 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                        {activeView === 'writing' ? <PenTool className="h-5 w-5 text-primary" /> : <Mic className="h-5 w-5 text-primary" />}
+                        {dashboardView === 'writing' ? <PenTool className="h-5 w-5 text-primary" /> : <Mic className="h-5 w-5 text-primary" />}
                       </div>
                       <div>
                         <p className="font-medium text-foreground group-hover:text-primary transition-colors">{session.topic}</p>

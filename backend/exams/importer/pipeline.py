@@ -18,6 +18,7 @@ from exams.importer import pdfsource
 from exams.importer.classify import classify, normalise_instruction
 from exams.importer.layout import read_page, strip_repeated_chrome
 from exams.importer.parsers import ParsedGroup, parse_group
+from exams.importer.passages import passage_regions
 from exams.importer.segment import (
     LISTENING,
     READING,
@@ -77,12 +78,14 @@ def run(
     say("reading pages")
     pages_raw: dict[int, list] = {}
     page_sources: dict[int, str] = {}
+    page_sizes: dict[int, tuple[float, float]] = {}
     page_height = 0.0
     page_width = 0.0
     for page in pdfsource.load_pages(path, ocr_engine, first_page, last_page):
         page_height = max(page_height, page.height)
         page_width = max(page_width, page.width)
         page_sources[page.number] = page.source
+        page_sizes[page.number] = (page.width, page.height)
         pages_raw[page.number] = read_page(page.words, page.width)
 
     needing_ocr = [n for n, source in page_sources.items()
@@ -125,6 +128,14 @@ def run(
                 }
                 if skill == READING:
                     section_payload["passage_text"] = _passage_text(section)
+                    section_payload["passage_regions"] = passage_regions(
+                        section, pages, page_sizes
+                    )
+                    if not section_payload["passage_regions"]:
+                        result.warnings.append(
+                            f"Test {test.number} Reading Passage {section.order}: no "
+                            f"passage region found; the retyped text will be shown"
+                        )
                 for span in section.groups:
                     classification = classify(span.instruction)
                     if classification.type == bp.UNKNOWN and span.instruction.strip():

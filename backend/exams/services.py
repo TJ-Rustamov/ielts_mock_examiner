@@ -11,7 +11,7 @@ failure modes for nothing.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import timedelta
 
 from django.db import transaction
@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from exams import bands
 from exams.keysheet import answers_from_json
-from exams.marking import BLANK, AnswerKey, mark_module
+from exams.marking import BLANK, TEXT, AnswerKey, mark_module
 from exams.models import (
     LISTENING,
     Attempt,
@@ -65,11 +65,25 @@ def module_duration(module: Module) -> int:
 
 
 def answer_keys_for(module: Module) -> dict[int, AnswerKey]:
-    """The module's confirmed answer key, or empty if it has none."""
+    """The module's confirmed answer key, or empty if it has none.
+
+    Word limits come from the question's rubric, not from the key. Only the
+    group knows "ONE WORD ONLY" for certain: a key typed into the admin grid or
+    read from an image never carries it, and relying on the key meant an
+    over-long answer was marked plain wrong instead of over the word limit.
+    """
     sheet = getattr(module, "answer_sheet", None)
     if sheet is None or not sheet.is_verified:
         return {}
-    return answers_from_json(sheet.answers)
+    keys = answers_from_json(sheet.answers)
+    limits = dict(
+        Question.objects.filter(module=module).values_list("number", "group__word_limit")
+    )
+    for number, key in list(keys.items()):
+        limit = limits.get(number) or ""
+        if limit and key.kind == TEXT and key.word_limit != limit:
+            keys[number] = replace(key, word_limit=limit)
+    return keys
 
 
 @transaction.atomic

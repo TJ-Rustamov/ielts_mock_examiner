@@ -170,6 +170,33 @@ class Section(models.Model):
         return f"{self.module} {self.label or self.order}"
 
 
+class PassagePage(models.Model):
+    """One page of a reading passage, cropped from the book as printed.
+
+    Shown instead of the retyped passage text: the printed page keeps paragraph
+    letters, italics, footnotes and glossaries that text extraction loses, and
+    it works the same for scanned books. `passage_html` stays as a fallback.
+    """
+
+    section = models.ForeignKey(
+        Section, on_delete=models.CASCADE, related_name="passage_pages"
+    )
+    order = models.PositiveSmallIntegerField()
+    image = models.ImageField(upload_to="exam-passages/")
+    source_page = models.PositiveSmallIntegerField(null=True, blank=True)
+    #: [x0, y0, x1, y1] in PDF points, visible page coordinates.
+    bbox = models.JSONField(null=True, blank=True)
+    width = models.PositiveIntegerField(default=0)
+    height = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = [("section", "order")]
+        ordering = ["section", "order"]
+
+    def __str__(self) -> str:
+        return f"{self.section} page {self.order}"
+
+
 class GroupImage(models.Model):
     """A cropped figure: a map, plan, diagram or flow-chart."""
 
@@ -357,7 +384,11 @@ class Attempt(models.Model):
 
 class AttemptAnswer(models.Model):
     attempt = models.ForeignKey(Attempt, on_delete=models.CASCADE, related_name="answers")
-    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="+")
+    #: PROTECT, not CASCADE. A student's answer must never disappear as a side
+    #: effect of content maintenance - re-importing a book once deleted every
+    #: saved answer on the module this way. Deleting a question that has answers
+    #: now fails loudly instead.
+    question = models.ForeignKey(Question, on_delete=models.PROTECT, related_name="+")
     question_number = models.PositiveSmallIntegerField()
     #: {"text": "..."} | {"letter": "B"} | {"letters": ["B", "D"]}
     value = models.JSONField(default=dict, blank=True)

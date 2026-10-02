@@ -13,24 +13,29 @@ the key.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
+from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils.text import slugify
 
+from exams.importer.passages import render_regions
 from exams.models import (
     LISTENING,
     READING,
     AnswerKeySheet,
+    AttemptAnswer,
     Book,
     ExamTest,
     Module,
+    PassagePage,
     Question,
     QuestionGroup,
     Section,
 )
 
-__all__ = ["PublishResult", "publish_payload"]
+__all__ = ["PublishResult", "publish_payload", "publish_passage_pages"]
 
 #: An IELTS Reading module is an hour. Listening is however long its audio runs
 #: plus transfer time, so it is computed when the audio is attached.
@@ -45,6 +50,8 @@ class PublishResult:
     updated_modules: list[int] = field(default_factory=list)
     questions_written: int = 0
     warnings: list[str] = field(default_factory=list)
+    source_pdf: str = ""
+    passage_pages_written: int = 0
 
     @property
     def module_ids(self) -> list[int]:
@@ -52,9 +59,15 @@ class PublishResult:
 
 
 @transaction.atomic
-def publish_payload(payload: dict, book_slug: str = "") -> PublishResult:
-    """Materialise a draft into Book/Test/Module/Section/Group/Question rows."""
+def publish_payload(payload: dict, book_slug: str = "", source_pdf: str = "") -> PublishResult:
+    """Materialise a draft into Book/Test/Module/Section/Group/Question rows.
+
+    `source_pdf` is the book file, used to crop passage pages. It defaults to
+    the path the importer recorded; without a readable PDF the passages keep
+    whatever page images they already have and fall back to text.
+    """
     result = PublishResult()
+    result.source_pdf = source_pdf or (payload.get("book") or {}).get("source_pdf") or ""
 
     book_data = payload.get("book") or {}
     slug = book_slug or book_data.get("slug") or ""
@@ -100,10 +113,16 @@ def _publish_module(test: ExamTest, skill: str, data: dict, result: PublishResul
     )
     (result.created_modules if created else result.updated_modules).append(module.pk)
 
-    # Replace the module's content wholesale. Questions are recreated rather than
-    # diffed, but their (module, number) natural key is stable, so an attempt
-    # answer keyed on question number still lines up after a re-import.
+    # Everything is upserted in place - sections by order, groups by
+    # (section, order), questions by (module, number) - and nothing is deleted
+    # until the new content is attached.
+    #
+    # This used to delete a section's groups and recreate them. A group delete
+    # cascades to its questions and from there to every student's saved
+    # answers, so a routine re-import silently erased all work done on the
+    # module. Upserting keeps Question rows, and therefore answers, intact.
     kept_section_orders: list[int] = []
+    kept_numbers: set[int] = set()
 
     for section_data in data.get("sections") or []:
         order = section_data.get("order") or (len(kept_section_orders) + 1)
@@ -118,18 +137,101 @@ def _publish_module(test: ExamTest, skill: str, data: dict, result: PublishResul
                 "last_question": section_data.get("last_question") or 1,
             },
         )
-
-        section.groups.all().delete()
+        if skill == READING and section_data.get("passage_regions"):
+            written, warnings = publish_passage_pages(
+                section, section_data["passage_regions"], result.source_pdf
+            )
+            result.passage_pages_written += written
+            result.warnings.extend(warnings)
+        kept_group_orders: list[int] = []
         for index, group_data in enumerate(section_data.get("groups") or [], start=1):
-            _publish_group(module, section, index, group_data, result)
+            kept_group_orders.append(index)
+            kept_numbers |= _publish_group(module, section, index, group_data, result)
+        section._kept_group_orders = kept_group_orders  # used by the cleanup below
 
-    Section.objects.filter(module=module).exclude(order__in=kept_section_orders).delete()
+    _remove_stale_questions(module, kept_numbers, result)
+
+    for section in Section.objects.filter(module=module):
+        kept_orders = getattr(section, "_kept_group_orders", None)
+        if section.order not in kept_section_orders:
+            kept_orders = []
+        elif kept_orders is None:
+            kept_orders = list(
+                QuestionGroup.objects.filter(section=section).values_list("order", flat=True)
+            )
+        for group in section.groups.exclude(order__in=kept_orders):
+            if group.questions.exists():
+                result.warnings.append(
+                    f"module {module.pk}: kept a group that is no longer in the import "
+                    f"because students have answered its questions"
+                )
+                continue
+            group.delete()
+        if section.order not in kept_section_orders and not section.groups.exists():
+            section.delete()
 
     numbers = set(module.questions.values_list("number", flat=True))
     module.total_questions = max(numbers) if numbers else 0
     module.save(update_fields=["total_questions", "updated_at"])
 
     _seed_answer_sheet(module, data, result)
+
+
+def publish_passage_pages(section: Section, regions: list[dict], pdf_path: str) -> tuple[int, list[str]]:
+    """Replace a section's passage page images with fresh crops from the PDF.
+
+    Nothing references these rows, so replacing them wholesale is safe. The old
+    images are kept unless rendering produced at least one new page: a missing
+    or unreadable PDF must not wipe out pages that were fine.
+    """
+    label = f"{section.module} {section.label or section.order}"
+    if not regions:
+        return 0, []
+    if not pdf_path or not os.path.exists(pdf_path):
+        return 0, [f"{label}: source PDF not available, passage pages not rendered"]
+
+    try:
+        rendered = list(render_regions(pdf_path, regions))
+    except Exception as exc:  # rendering is best effort; the text fallback remains
+        return 0, [f"{label}: passage pages could not be rendered ({exc})"]
+    if not rendered:
+        return 0, [f"{label}: no passage pages were rendered"]
+
+    for old in section.passage_pages.all():
+        old.image.delete(save=False)
+        old.delete()
+
+    book = section.module.test.book.slug
+    test = section.module.test.number
+    for order, (region, jpeg, width, height) in enumerate(rendered, start=1):
+        page = PassagePage(
+            section=section, order=order, source_page=region["page"],
+            bbox=region["bbox"], width=width, height=height,
+        )
+        page.image.save(
+            f"{book}-t{test}-p{section.order}-{order}.jpg", ContentFile(jpeg), save=False
+        )
+        page.save()
+    return len(rendered), []
+
+
+def _remove_stale_questions(module: Module, kept_numbers: set[int], result: PublishResult) -> None:
+    """Delete questions the new import no longer has - unless someone answered them.
+
+    An answered question is kept, with a warning, rather than deleted: losing a
+    student's recorded work to a re-import is worse than an extra question the
+    admin can remove deliberately.
+    """
+    stale = Question.objects.filter(module=module).exclude(number__in=kept_numbers)
+    answered = set(
+        AttemptAnswer.objects.filter(question__in=stale).values_list("question_id", flat=True)
+    )
+    stale.exclude(pk__in=answered).delete()
+    if answered:
+        result.warnings.append(
+            f"module {module.pk}: kept {len(answered)} question(s) no longer in the import "
+            f"because students have answered them"
+        )
 
 
 def _seed_answer_sheet(module: Module, data: dict, result: PublishResult) -> None:
@@ -186,31 +288,34 @@ def _seed_answer_sheet(module: Module, data: dict, result: PublishResult) -> Non
 
 def _publish_group(
     module: Module, section: Section, order: int, data: dict, result: PublishResult
-) -> None:
-    group = QuestionGroup.objects.create(
-        section=section,
-        order=order,
-        type=data.get("type") or "unknown",
-        instruction_text=data.get("instruction") or "",
-        first_question=data.get("first_question") or 0,
-        last_question=data.get("last_question") or 0,
-        word_limit=data.get("word_limit") or "",
-        select_count=data.get("select_count"),
-        options=data.get("options") or [],
-        options_reusable=bool(data.get("options_reusable")),
-        layout=data.get("layout") or [],
-        source_page=data.get("page_start"),
-        source_bbox=data.get("source_bbox"),
-        needs_review=bool(data.get("needs_review")),
-        warnings=data.get("warnings") or [],
+) -> set[int]:
+    """Upsert one group and its questions. Returns the question numbers written."""
+    group, _ = QuestionGroup.objects.update_or_create(
+        section=section, order=order,
+        defaults={
+            "type": data.get("type") or "unknown",
+            "instruction_text": data.get("instruction") or "",
+            "first_question": data.get("first_question") or 0,
+            "last_question": data.get("last_question") or 0,
+            "word_limit": data.get("word_limit") or "",
+            "select_count": data.get("select_count"),
+            "options": data.get("options") or [],
+            "options_reusable": bool(data.get("options_reusable")),
+            "layout": data.get("layout") or [],
+            "source_page": data.get("page_start"),
+            "source_bbox": data.get("source_bbox"),
+            "needs_review": bool(data.get("needs_review")),
+            "warnings": data.get("warnings") or [],
+        },
     )
 
+    numbers: set[int] = set()
     for index, question_data in enumerate(data.get("questions") or [], start=1):
         number = question_data.get("number")
         if not number:
             continue
-        # update_or_create on (module, number): the same question may already
-        # exist from a previous import, and re-using the row keeps its id.
+        # (module, number) is the natural key: re-using the row keeps its id, so
+        # answers already saved against it stay attached.
         Question.objects.update_or_create(
             module=module, number=number,
             defaults={
@@ -220,4 +325,6 @@ def _publish_group(
                 "options": question_data.get("options") or [],
             },
         )
+        numbers.add(number)
         result.questions_written += 1
+    return numbers

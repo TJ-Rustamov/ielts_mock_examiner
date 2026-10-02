@@ -113,14 +113,15 @@ class AttemptDetailAPIView(APIView):
             Attempt.objects.select_related("module", "module__test", "module__test__book"),
             pk=attempt_id, user=request.user,
         )
-        payload = {
+        # Content is returned after submission too: the results screen shows
+        # each question as it was asked next to the candidate's answer. It is
+        # safe to do so because content serializers never carry answer keys.
+        return Response({
             "attempt": AttemptSerializer(attempt, context={"request": request}).data,
-        }
-        if attempt.status == Attempt.IN_PROGRESS:
-            payload["content"] = ModuleContentSerializer(
+            "content": ModuleContentSerializer(
                 attempt.module, context={"request": request}
-            ).data
-        return Response(payload)
+            ).data,
+        })
 
 
 class AttemptAnswersAPIView(APIView):

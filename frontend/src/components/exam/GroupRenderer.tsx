@@ -93,7 +93,10 @@ function GapInput({
         autoCorrect="off"
         autoCapitalize="off"
         className={cn(
-          'h-8 inline-block px-2 py-0 text-sm', width,
+          // A full, clearly visible box: a faint border lost the corners on
+          // the tinted study-mode backgrounds.
+          'h-8 inline-block rounded-md border-2 border-foreground/40 bg-background px-2 py-0 text-sm',
+          'focus-visible:border-primary', width,
           over && 'ring-2 ring-amber-400',
           mark && (mark.is_correct
             ? 'ring-2 ring-emerald-500 bg-emerald-50 dark:bg-emerald-950'
@@ -312,10 +315,8 @@ export function GroupRenderer(props: GroupRendererProps) {
       }
 
       case 'mcq_single':
-      case 'mcq_multi':
         return (
           <div className="space-y-4">
-            {group.options.length > 0 && <OptionBank options={group.options} />}
             {group.questions.map((question) => (
               <div key={question.number} className="space-y-1">
                 <p className="text-sm">
@@ -325,13 +326,54 @@ export function GroupRenderer(props: GroupRendererProps) {
                   number={question.number}
                   choices={question.options.length ? question.options : group.options}
                   props={props}
-                  multi={group.type === 'mcq_multi'}
-                  selectCount={group.select_count}
                 />
               </div>
             ))}
           </div>
         );
+
+      case 'mcq_multi': {
+        // "Choose TWO letters, A-E" covers two question numbers with a single set
+        // of checkboxes. Chunk the numbers by the select count and write the same
+        // letters to every number in the chunk; the marker scores each chunk as an
+        // either-order set, one mark per correct letter.
+        const size = Math.max(1, group.select_count ?? 2);
+        const chunks: ExamGroup['questions'][] = [];
+        for (let i = 0; i < group.questions.length; i += size) {
+          chunks.push(group.questions.slice(i, i + size));
+        }
+        return (
+          <div className="space-y-5">
+            {chunks.map((chunk) => {
+              const first = chunk[0];
+              const last = chunk[chunk.length - 1];
+              const prompt = chunk.map((q) => q.prompt_text).find(Boolean) ?? '';
+              const choices = chunk.find((q) => q.options.length)?.options ?? group.options;
+              const setProps: GroupRendererProps = {
+                ...props,
+                onChange: (_number, value) => chunk.forEach((q) => onChange(q.number, value)),
+              };
+              return (
+                <div key={first.number} className="space-y-1">
+                  <p className="text-sm">
+                    <b className="mr-2">
+                      {first.number === last.number ? first.number : `${first.number}–${last.number}`}
+                    </b>
+                    {prompt}
+                  </p>
+                  <ChoiceRow
+                    number={first.number}
+                    choices={choices}
+                    props={setProps}
+                    multi
+                    selectCount={chunk.length}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
 
       case 'matching_bank':
       case 'matching_features':
@@ -371,7 +413,8 @@ export function GroupRenderer(props: GroupRendererProps) {
                       spellCheck={false}
                       autoComplete="off"
                       className={cn(
-                        'h-8 w-16 text-center uppercase',
+                        'h-8 w-16 rounded-md border-2 border-foreground/40 bg-background text-center uppercase',
+                        'focus-visible:border-primary',
                         mark && (mark.is_correct
                           ? 'ring-2 ring-emerald-500' : 'ring-2 ring-red-400'),
                       )}

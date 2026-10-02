@@ -54,14 +54,30 @@ class SectionSerializer(serializers.ModelSerializer):
     groups = QuestionGroupSerializer(many=True, read_only=True)
     has_audio = serializers.SerializerMethodField()
     audio_seconds = serializers.SerializerMethodField()
+    passage_pages = serializers.SerializerMethodField()
 
     class Meta:
         model = Section
         fields = [
             "id", "order", "label", "title", "first_question", "last_question",
-            "passage_html", "passage_paragraphs", "has_audio", "audio_seconds",
-            "groups",
+            "passage_html", "passage_paragraphs", "passage_pages", "has_audio",
+            "audio_seconds", "groups",
         ]
+
+    def get_passage_pages(self, section) -> list[dict]:
+        request = self.context.get("request")
+        pages = []
+        for page in section.passage_pages.all():
+            if not page.image:
+                continue
+            url = page.image.url
+            pages.append({
+                "url": request.build_absolute_uri(url) if request else url,
+                "width": page.width,
+                "height": page.height,
+                "page": page.source_page,
+            })
+        return pages
 
     def get_has_audio(self, section) -> bool:
         return bool(section.audio_id)

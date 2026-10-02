@@ -51,6 +51,13 @@ export interface ExamGroup {
   questions: ExamQuestion[];
 }
 
+export interface PassagePageImage {
+  url: string;
+  width: number;
+  height: number;
+  page: number | null;
+}
+
 export interface ExamSection {
   id: number;
   order: number;
@@ -60,6 +67,8 @@ export interface ExamSection {
   last_question: number;
   passage_html: string;
   passage_paragraphs: { label: string; html: string }[];
+  /** The passage as printed, cropped from the book. Preferred over the text. */
+  passage_pages: PassagePageImage[];
   has_audio: boolean;
   audio_seconds: number | null;
   groups: ExamGroup[];
@@ -146,14 +155,72 @@ export function getAttempt(attemptId: number) {
   );
 }
 
-export function saveAnswers(
+/** Error from the exam endpoints that bypass fetchJson; `code` is the API error code. */
+export class ExamRequestError extends Error {
+  constructor(message: string, public status: number, public code: string) {
+    super(message);
+  }
+}
+
+function authHeaders(json = true): Record<string, string> {
+  const token = localStorage.getItem('auth_token');
+  return {
+    ...(json ? { 'Content-Type': 'application/json' } : {}),
+    ...(token ? { Authorization: `Token ${token}` } : {}),
+  };
+}
+
+/**
+ * Autosave. Deliberately not fetchJson: that helper logs the user out on any
+ * network failure, which mid-exam would end the session over a dropped
+ * connection. Here a failure only leaves the answers queued locally.
+ */
+export async function saveAnswers(
   attemptId: number,
   answers: { question_number: number; value: AnswerValue }[],
-) {
-  return fetchJson<{ saved: number; server_now: string; expires_at: string }>(
-    `/api/exams/attempts/${attemptId}/answers`,
-    { method: 'PATCH', body: JSON.stringify({ answers }) },
-  );
+  keepalive = false,
+): Promise<{ saved: number; server_now: string; expires_at: string }> {
+  const response = await fetch(apiUrl(`/api/exams/attempts/${attemptId}/answers`), {
+    method: 'PATCH',
+    headers: authHeaders(),
+    body: JSON.stringify({ answers }),
+    keepalive,
+  });
+  const text = await response.text();
+  let body: Record<string, unknown> = {};
+  try { body = text ? JSON.parse(text) : {}; } catch { body = {}; }
+  if (!response.ok) {
+    throw new ExamRequestError(
+      typeof body.message === 'string' ? body.message : `Request failed: ${response.status}`,
+      response.status,
+      typeof body.error === 'string' ? body.error : '',
+    );
+  }
+  return body as { saved: number; server_now: string; expires_at: string };
+}
+
+/**
+ * Listening audio sits behind an authenticated endpoint, and an <audio> element
+ * cannot send an Authorization header - so fetch it and give the element a blob
+ * URL. The caller owns the URL and must revoke it.
+ */
+export async function fetchAudioObjectUrl(attemptId: number, sectionId: number): Promise<string> {
+  const response = await fetch(attemptAudioUrl(attemptId, sectionId), { headers: authHeaders(false) });
+  if (!response.ok) {
+    throw new ExamRequestError(`Audio unavailable (${response.status})`, response.status, '');
+  }
+  return URL.createObjectURL(await response.blob());
+}
+
+/** Readable message from a fetchJson error, whose message is the raw response body. */
+export function errorMessage(error: unknown, fallback = 'Something went wrong'): string {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed.message || parsed.detail || parsed.error || fallback;
+  } catch {
+    return raw || fallback;
+  }
 }
 
 export function advanceSection(attemptId: number, section: number) {
@@ -197,12 +264,22 @@ export interface AdminModule extends ModuleSummary {
   answer_sheet_verified: boolean;
 }
 
+export interface SheetAnswer {
+  kind: string;
+  accepted: string[];
+  word_limit?: string;
+  set_id?: string | null;
+  set_numbers?: number[];
+  select_count?: number | null;
+}
+
 export interface AnswerSheet {
   id: number;
   module: number;
   image_url: string | null;
-  answers: Record<string, { kind: string; accepted: string[] }>;
-  ocr_answers: Record<string, { kind: string; accepted: string[] }>;
+  answers: Record<string, SheetAnswer>;
+  proposed_answers: Record<string, SheetAnswer>;
+  proposal_source: '' | 'pdf' | 'ocr' | 'manual';
   raw_text: Record<string, string>;
   ocr_confidence: number | null;
   warnings: string[];
@@ -235,7 +312,7 @@ export function uploadAnswerSheet(moduleId: number, file: File) {
   const form = new FormData();
   form.append('image', file);
   return fetchJson<{
-    sheet: AnswerSheet; read: number; total: number; missing: number[];
+    sheet: AnswerSheet; read: number; filled_by_ocr?: number; total: number; missing: number[];
   }>(`/api/exams/admin/modules/${moduleId}/answer-sheet`, {
     method: 'POST',
     body: form,
@@ -245,7 +322,7 @@ export function uploadAnswerSheet(moduleId: number, file: File) {
 /** Send the corrected grid. Any edit clears the verified flag server-side. */
 export function saveAnswerSheet(
   moduleId: number,
-  answers: Record<string, string>,
+  answers: Record<string, string | SheetAnswer>,
 ) {
   return fetchJson<AnswerSheet>(
     `/api/exams/admin/modules/${moduleId}/answer-sheet`,
@@ -298,4 +375,39 @@ export function publishImportJob(jobId: number) {
     book: string | null; modules: number[]; questions: number;
     warnings: string[]; note: string;
   }>(`/api/exams/admin/import-jobs/${jobId}/publish`, { method: 'POST' });
+}
+
+export interface AudioAsset {
+  id: number;
+  book: number;
+  test_number: number | null;
+  part_number: number | null;
+  original_filename: string;
+  mime: string;
+  duration_seconds: number | null;
+  url: string | null;
+}
+
+export function listAudio(bookSlug: string) {
+  return fetchJson<{ assets: AudioAsset[] }>(
+    `/api/exams/admin/audio?book=${encodeURIComponent(bookSlug)}`,
+  );
+}
+
+export function uploadAudio(bookSlug: string, files: File[]) {
+  const form = new FormData();
+  form.append('book_slug', bookSlug);
+  files.forEach((file) => form.append('files', file));
+  return fetchJson<{ created: AudioAsset[]; note: string }>('/api/exams/admin/audio', {
+    method: 'POST',
+    body: form,
+  });
+}
+
+/** Confirm the (test, part) slot; attaches the file to that listening section. */
+export function assignAudio(assetId: number, testNumber: number | null, partNumber: number | null) {
+  return fetchJson<{ asset: AudioAsset; attached_to_section: number | null }>(
+    `/api/exams/admin/audio/${assetId}`,
+    { method: 'PATCH', body: JSON.stringify({ test_number: testNumber, part_number: partNumber }) },
+  );
 }

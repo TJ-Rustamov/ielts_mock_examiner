@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Sun, Moon, Settings, PenTool, Mic, User, Sparkles, LayoutDashboard, LogOut } from 'lucide-react';
+import { Sun, Moon, Settings, PenTool, Mic, User, Sparkles, LayoutDashboard, LogOut, BookOpen, Headphones } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useThemeContext } from '@/contexts/ThemeContext';
 import { getCurrentUser, isAuthenticated, logoutRemote } from '@/lib/auth';
@@ -16,6 +16,8 @@ const Header = () => {
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { id: 'writing' as const, label: 'Writing', icon: PenTool, path: '/writing' },
     { id: 'speaking' as const, label: 'Speaking', icon: Mic, path: '/speaking' },
+    { id: 'reading' as const, label: 'Reading', icon: BookOpen, path: '/reading' },
+    { id: 'listening' as const, label: 'Listening', icon: Headphones, path: '/listening' },
   ];
 
   const isAuthPage = location.pathname === '/auth';
@@ -36,7 +38,7 @@ const Header = () => {
               <button
                 key={tab.id}
                 onClick={() => {
-                  if (tab.id === 'writing' || tab.id === 'speaking') setStudyMode(tab.id);
+                  if (tab.id !== 'dashboard') setStudyMode(tab.id);
                   navigate(tab.path);
                 }}
                 className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
