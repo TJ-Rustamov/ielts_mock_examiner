@@ -100,11 +100,36 @@ def deconfuse(text: str) -> str:
     return text
 
 
+_SPACELESS_CACHE: dict[str, re.Pattern] = {}
+
+
+def spaceless(pattern: str) -> re.Pattern:
+    r"""Compile a catalogue regex so it also matches with the spaces missing.
+
+    RapidOCR's recogniser drops spaces it judges narrow, so a scanned rubric
+    can arrive as "completethenotesbelow." or "WriteONEWORDONLYforeachanswer."
+    Every catalogue pattern separates its words with ``\s+`` or a literal
+    space, so making those optional - and dropping ``\b``, which never fires
+    inside a glued run of letters - gives a variant that reads the glued form.
+    Used only after the normal passes miss, and a hit is always flagged for
+    review.
+    """
+    compiled = _SPACELESS_CACHE.get(pattern)
+    if compiled is None:
+        loose = pattern.replace("\\s+", "\\s*").replace(" ", "\\s*").replace("\\b", "")
+        compiled = re.compile(loose, re.IGNORECASE)
+        _SPACELESS_CACHE[pattern] = compiled
+    return compiled
+
+
 def extract_word_limit(text: str) -> tuple[str, bool]:
     """Return (word_limit key, whether a number may be added on top)."""
     normalised = normalise_instruction(text)
     for pattern, key in bp.WORD_LIMIT_PATTERNS:
         if re.search(pattern, normalised):
+            return key, key.endswith("_number")
+    for pattern, key in bp.WORD_LIMIT_PATTERNS:
+        if spaceless(pattern).search(normalised):
             return key, key.endswith("_number")
     return "", False
 
@@ -119,8 +144,14 @@ def _extract_select_count(normalised: str) -> int | None:
     return bp.NUMBER_WORDS.get(token)
 
 
+#: "A, B or C" / "A, B, C or D" - how single-answer MCQ rubrics list letters.
+_LETTER_LIST = re.compile(
+    r"\b([A-J])\s*,\s*(?:[A-J]\s*,\s*)*[A-J]?\s*,?\s*or\s*([A-J])\b"
+)
+
+
 def _extract_letter_range(text: str) -> tuple[str, str] | None:
-    match = bp.LETTER_RANGE.search(text)
+    match = bp.LETTER_RANGE.search(text) or _LETTER_LIST.search(text)
     if not match:
         return None
     start, end = match.group(1).upper(), match.group(2).upper()
@@ -168,6 +199,22 @@ def classify(instruction: str) -> Classification:
             break
 
     if matched_rubric is None:
+        # Pass 3: spaces lost in recognition ("completethenotesbelow.").
+        for candidate in (normalised, repaired):
+            for rubric in bp.CATALOGUE:
+                if spaceless(rubric.pattern).search(candidate):
+                    matched_rubric = rubric
+                    result.type = rubric.type
+                    result.matched = rubric.canonical
+                    result.confidence = 90.0
+                    result.needs_review = True
+                    break
+            if matched_rubric is not None:
+                if result.letter_range is None:
+                    result.letter_range = _extract_letter_range(deconfuse(instruction))
+                break
+
+    if matched_rubric is None:
         best_score, best = 0.0, None
         for rubric in bp.CATALOGUE:
             score = _fuzzy_score(normalised, rubric.canonical.lower())
@@ -197,6 +244,24 @@ def classify(instruction: str) -> Classification:
     return result
 
 
+#: Average characters per whitespace-separated token above which a line is
+#: taken to have lost its spaces. English prose averages about five, rubric
+#: lines less ("Choose the correct letter, A, B or C." is under four).
+GLUED_TOKEN_LENGTH = 7.0
+#: ...or any single token this long - a run like "WriteONEWORDONLY".
+GLUED_RUN_LENGTH = 12
+
+
+def looks_glued(text: str) -> bool:
+    """True when recognition has evidently dropped some of a line's spaces."""
+    tokens = text.split()
+    if not tokens:
+        return False
+    if any(len(t) >= GLUED_RUN_LENGTH for t in tokens):
+        return True
+    return sum(len(t) for t in tokens) / len(tokens) >= GLUED_TOKEN_LENGTH
+
+
 def looks_like_rubric(text: str) -> bool:
     """True when a line carries rubric content rather than question content.
 
@@ -215,6 +280,15 @@ def looks_like_rubric(text: str) -> bool:
                 return True
         for pattern, _key in bp.WORD_LIMIT_PATTERNS:
             if re.search(pattern, candidate):
+                return True
+    # Only a line that is visibly glued gets the spaceless reading; on a line
+    # that kept its spaces it would let "someone worded" pass for "one word".
+    if looks_glued(normalised):
+        for rubric in bp.CATALOGUE:
+            if spaceless(rubric.pattern).search(normalised):
+                return True
+        for pattern, _key in bp.WORD_LIMIT_PATTERNS:
+            if spaceless(pattern).search(normalised):
                 return True
     return False
 

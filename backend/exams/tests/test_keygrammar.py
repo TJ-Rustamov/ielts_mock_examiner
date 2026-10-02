@@ -10,9 +10,12 @@ import unittest
 
 from exams.keygrammar import (
     MAX_VARIANTS,
+    KeyRow,
     detect_kind,
     expand_alternatives,
     parse_answer_key,
+    parse_answer_rows,
+    repair_question_number,
 )
 from exams.marking import (
     LETTER,
@@ -255,3 +258,99 @@ class RoundTripTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def rows(*specs, column=0, x=40.0, top=100.0, step=14.0, conf=0.95, page=118):
+    """Key rows laid out down one column. A spec is text, or (text, indent)."""
+    out = []
+    y = top
+    for spec in specs:
+        text, indent = spec if isinstance(spec, tuple) else (spec, 0.0)
+        out.append(KeyRow(text, conf, page, (x + indent, y, x + indent + 120, y + 10), column))
+        y += step
+    return out
+
+
+class RowParserTests(unittest.TestCase):
+    """The column-by-column reader used for scanned key pages."""
+
+    def test_reads_every_row_and_records_where_it_is(self):
+        result = parse_answer_rows(rows(*[f"{n} word{n}" for n in range(1, 11)]), total=10)
+        self.assertEqual(sorted(result.keys), list(range(1, 11)))
+        self.assertTrue(result.reliable)
+        self.assertEqual(result.crops[3]["page"], 118)
+        self.assertEqual(result.confidence[3], 0.95)
+
+    def test_order_does_not_matter(self):
+        # Columns read in the "wrong" order still pair each answer with its own number.
+        shuffled = rows("21 B", "1 mining", "22 C", "2 education")
+        result = parse_answer_rows(shuffled, total=22)
+        self.assertEqual(result.keys[1].accepted, ("mining",))
+        self.assertEqual(result.keys[21].accepted, ("B",))
+
+    def test_wrapped_answer_joins_its_continuation(self):
+        result = parse_answer_rows(rows(
+            "1 (the) 13(th) (of) January/", ("13.01 / 13.1", 20.0), "2 48 / forty-eight",
+        ), total=2)
+        self.assertIn("13.01", result.keys[1].accepted)
+        self.assertEqual(result.keys[2].accepted, ("48", "forty-eight"))
+
+    def test_digit_lookalikes_are_repaired_in_the_number_only(self):
+        result = parse_answer_rows(rows("1 a", "l1 cafe", "2O B"), total=20,
+                                   expected_kinds={20: LETTER})
+        self.assertEqual(result.keys[11].accepted, ("cafe",))
+        self.assertEqual(result.keys[20].accepted, ("B",))
+
+    def test_answer_text_is_never_digit_repaired(self):
+        # "lO" in an answer stays letters; "B" stays the letter B.
+        result = parse_answer_rows(rows("7 lO", "8 B"), total=8)
+        self.assertEqual(result.keys[7].accepted, ("lO",))
+        self.assertEqual(result.keys[8].accepted, ("B",))
+
+    def test_lookalike_only_token_counts_only_as_the_next_number(self):
+        self.assertEqual(repair_question_number("B"), (8, False))
+        # A lone "B" under a set heading is a letter, not question 8.
+        result = parse_answer_rows(rows("21&22 IN EITHER ORDER", ("B", 20.0), ("D", 20.0)),
+                                   total=22)
+        self.assertEqual(result.keys[21].accepted, ("B", "D"))
+        self.assertNotIn(8, result.keys)
+
+    def test_either_order_sets_as_ocr_delivers_them(self):
+        for header in ("21&22 IN EITHER ORDER", "21&22 INEITHERORDER",
+                       "21&2NEITHER ORDER", "21&2DNEITHER ORDER"):
+            with self.subTest(header=header):
+                result = parse_answer_rows(rows(header, ("B", 20.0), ("D", 20.0)), total=22)
+                self.assertEqual(result.keys[21].kind, LETTER_SET)
+                self.assertEqual(result.keys[22].set_numbers, (21, 22))
+                self.assertEqual(set(result.keys[22].accepted), {"B", "D"})
+
+    def test_headings_and_sidebar_end_an_answer(self):
+        result = parse_answer_rows(rows(
+            "10 slow", "Part2,Questions11-20", "11 A",
+            "20 C", "If you score ...", "0-15 you are unlikely toget an acceptable score",
+        ), total=20)
+        self.assertEqual(result.raw[10], "slow")
+        self.assertEqual(result.raw[20], "C")
+
+    def test_a_number_read_twice_is_withheld(self):
+        # "9 metal(s)" misread as "6 metal(s)".
+        result = parse_answer_rows(rows("6 10/ten", "7 weather", "8 cafe", "6 metal(s)"),
+                                   total=9)
+        self.assertNotIn(6, result.keys)
+        self.assertIn(6, result.conflicts)
+        self.assertIn(9, result.missing)
+
+    def test_welded_rows_are_withheld(self):
+        result = parse_answer_rows(rows("1 10/ten 21 B", "2 weather"), total=22)
+        self.assertNotIn(1, result.keys)
+        self.assertFalse(result.reliable)
+
+    def test_a_number_inside_an_answer_is_fine_when_it_has_its_own_row(self):
+        result = parse_answer_rows(rows("2 weather", "15 2 weeks"), total=15)
+        self.assertEqual(result.keys[15].accepted, ("2 weeks",))
+
+    def test_continuation_must_sit_under_its_answer(self):
+        far = [KeyRow("1 mining", 0.9, 1, (40, 100, 120, 110)),
+               KeyRow("you take IELTS later", 0.9, 1, (40, 400, 200, 410))]
+        result = parse_answer_rows(far, total=1)
+        self.assertEqual(result.raw[1], "mining")

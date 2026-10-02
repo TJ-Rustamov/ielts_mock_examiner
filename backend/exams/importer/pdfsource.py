@@ -25,8 +25,20 @@ MIN_NATIVE_WORDS = 50
 #: Render DPI for OCR and for the page images shown in the admin review screen.
 RENDER_DPI = 300
 
+#: A page whose largest image covers at least this share of its area is a
+#: scan. If it also has a text layer, that layer is somebody else's OCR.
+SCAN_COVERAGE = 0.85
+
 NATIVE = "native"
 OCR = "ocr"
+#: A scanned page that arrived with an invisible OCR layer already baked in -
+#: common on circulated copies of the Cambridge books. The words are usable for
+#: layout, but they are OCR output of unknown quality, not typeset text, and
+#: must never be trusted the way a real text layer is.
+EMBEDDED = "embedded_ocr"
+
+#: Sources whose words came from character recognition rather than typesetting.
+RECOGNISED = frozenset({OCR, EMBEDDED})
 
 
 class MissingDependency(RuntimeError):
@@ -61,6 +73,12 @@ class Word:
     `block`/`line`/`order` come from PyMuPDF's own text segmentation, which
     already resolves reading order across columns. They are -1 for words that
     came from OCR, where no such structure exists and geometry is all there is.
+
+    `segment` is the OCR detection box a word was cut from (-1 otherwise). It
+    is deliberately *not* block structure - RapidOCR orders its boxes row by
+    row across the whole page, so reading them as blocks would interleave
+    columns - but it lets column detection work on whole detected lines, whose
+    left edges line up, instead of on scattered word boxes.
     """
 
     text: str
@@ -72,6 +90,7 @@ class Word:
     block: int = -1
     line: int = -1
     order: int = -1
+    segment: int = -1
 
     @property
     def has_structure(self) -> bool:
@@ -100,9 +119,13 @@ class Page:
     width: float
     height: float
     words: list[Word] = field(default_factory=list)
-    source: str = NATIVE        # NATIVE | OCR
+    source: str = NATIVE        # NATIVE | OCR | EMBEDDED
     rotation: int = 0
     mean_confidence: float = 1.0
+    #: Degrees the OCR preprocessing rotated the render by to straighten it.
+    #: OCR words are in that straightened space, so a crop taken from the
+    #: original page needs a little extra padding on a skewed scan.
+    deskew_angle: float = 0.0
 
     @property
     def text(self) -> str:
@@ -121,6 +144,40 @@ def open_document(path: str):
 
 def page_has_text_layer(page) -> bool:
     return len(page.get_text("words")) >= MIN_NATIVE_WORDS
+
+
+def image_coverage(page) -> float:
+    """Share of the page area covered by its largest placed image, 0..1.
+
+    A typeset page has small figures at most; a scanned page is one picture
+    the size of the page. Measured on placements (``get_image_info``) rather
+    than on the image resources, so an image drawn twice or clipped is judged
+    by what is actually visible.
+    """
+    area = abs(page.rect)
+    if area <= 0:
+        return 0.0
+    best = 0.0
+    try:
+        placements = page.get_image_info()
+    except Exception:  # pragma: no cover - very old PyMuPDF / damaged page
+        return 0.0
+    for info in placements:
+        bbox = info.get("bbox")
+        if not bbox:
+            continue
+        rect = _fitz().Rect(bbox) & page.rect
+        if rect.is_empty:
+            continue
+        best = max(best, abs(rect) / area)
+    return min(best, 1.0)
+
+
+def classify_page(page) -> str:
+    """NATIVE, EMBEDDED (a scan with someone else's OCR layer) or OCR."""
+    if page_has_text_layer(page):
+        return EMBEDDED if image_coverage(page) >= SCAN_COVERAGE else NATIVE
+    return OCR
 
 
 def extract_words(page) -> list[Word]:
@@ -178,6 +235,20 @@ def render_clip(page, bbox: tuple[float, float, float, float], dpi: int = 200) -
     return pixmap.tobytes("png")
 
 
+def render_pages(path: str, numbers, dpi: int = RENDER_DPI):
+    """Yield ``(page number, png bytes, width pt, height pt)`` for 1-based pages."""
+    document = open_document(path)
+    try:
+        for number in numbers:
+            index = int(number) - 1
+            if not 0 <= index < document.page_count:
+                continue
+            page = document[index]
+            yield number, render_page(page, dpi), page.rect.width, page.rect.height
+    finally:
+        document.close()
+
+
 def load_pages(
     path: str,
     ocr_engine=None,
@@ -196,13 +267,19 @@ def load_pages(
         for index in range(start, min(stop, document.page_count)):
             page = document[index]
             rect = page.rect
-            if page_has_text_layer(page):
+            source = classify_page(page)
+            if source != OCR:
+                # An embedded OCR layer still goes through the text path: its
+                # words carry block structure and are usually no worse than a
+                # fresh OCR pass. What changes is that it is labelled as
+                # recognised text, so the answer key on such pages is re-read
+                # and cross-checked instead of being trusted outright.
                 yield Page(
                     number=index + 1,
                     width=rect.width,
                     height=rect.height,
                     words=extract_words(page),
-                    source=NATIVE,
+                    source=source,
                     rotation=page.rotation,
                 )
                 continue
@@ -231,6 +308,7 @@ def load_pages(
                 source=OCR,
                 rotation=page.rotation,
                 mean_confidence=confidence,
+                deskew_angle=float(getattr(ocr_engine, "last_deskew_angle", 0.0) or 0.0),
             )
     finally:
         document.close()
@@ -240,15 +318,19 @@ def describe(path: str) -> dict:
     """Cheap summary used by the import job's first stage and by diagnostics."""
     document = open_document(path)
     try:
-        native = 0
+        native = embedded = 0
         for index in range(document.page_count):
-            if page_has_text_layer(document[index]):
+            source = classify_page(document[index])
+            if source == NATIVE:
                 native += 1
+            elif source == EMBEDDED:
+                embedded += 1
         first = document[0].rect if document.page_count else None
         return {
             "pages": document.page_count,
             "pages_with_text": native,
-            "pages_needing_ocr": document.page_count - native,
+            "pages_embedded_ocr": embedded,
+            "pages_needing_ocr": document.page_count - native - embedded,
             "width": first.width if first else 0,
             "height": first.height if first else 0,
             "rotation": document[0].rotation if document.page_count else 0,

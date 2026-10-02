@@ -7,6 +7,7 @@ These need the database, so run them through Django:
 
 import json
 from datetime import timedelta
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -285,3 +286,146 @@ class RepublishTests(APITestCase):
     def test_an_unanswered_question_dropped_from_the_import_is_removed(self):
         publish_payload(book_payload([1]))
         self.assertFalse(Question.objects.filter(module=self.module, number=2).exists())
+
+
+class BlindReviewTests(APITestCase):
+    """Confirming a key without reading it."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user("admin-user", password="pass-12345", is_staff=True)
+        self.client.force_authenticate(self.admin)
+        self.module = build_module(verified=False, published=False)
+        sheet = AnswerKeySheet.objects.get(module=self.module)
+        # Q1-3 typeset and structurally sound; Q4 a shaky OCR read.
+        sheet.evidence = {str(n): {"source": "text"} for n in (1, 2, 3)}
+        sheet.evidence["4"] = {"source": "ocr", "confidence": 0.5, "agreement": None}
+        sheet.warnings = ["Test 1 reading: Q4: dropped a trailing '118' (was 'secret4 118')"]
+        sheet.save()
+        from exams.keyreview import recheck
+
+        recheck(sheet)
+        self.url = f"/api/exams/admin/modules/{self.module.pk}/answer-sheet"
+
+    def sheet(self):
+        return AnswerKeySheet.objects.get(module=self.module)
+
+    def test_blind_sheet_contains_no_answer(self):
+        response = self.client.get(self.url + "?blind=1")
+        self.assertEqual(response.status_code, 200)
+        payload = json.dumps(response.data)
+        self.assertNotIn("secret", payload)
+        self.assertNotIn("accepted", payload)
+        cells = response.data["sheet"]["cells"]
+        self.assertEqual(cells["1"]["status"], "trusted")
+        self.assertEqual(cells["4"]["status"], "check")
+        self.assertEqual(response.data["sheet"]["status_counts"]["check"], 1)
+        self.assertEqual(response.data["sheet"]["notes_count"], 1)
+
+    def test_full_sheet_still_has_answers_and_statuses(self):
+        data = self.client.get(self.url).data["sheet"]
+        self.assertEqual(data["answers"]["1"]["accepted"], ["secret1"])
+        self.assertEqual(data["statuses"]["4"], "check")
+
+    def test_blind_verify_waits_for_flagged_answers(self):
+        verify = f"{self.url}/verify"
+        refused = self.client.post(verify, {"mode": "blind"}, format="json")
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(refused.data["error"], "unchecked")
+
+        revealed = self.client.post(f"{self.url}/cells/4/reveal")
+        self.assertEqual(revealed.data["answer"]["accepted"], ["secret4"])
+        self.assertEqual(self.sheet().revealed, [4])
+
+        self.client.patch(self.url + "?blind=1", {"confirm": [4]}, format="json")
+        self.assertEqual(self.sheet().cell_status(4), "confirmed")
+
+        accepted = self.client.post(verify, {"mode": "blind"}, format="json")
+        self.assertEqual(accepted.status_code, 200, accepted.data)
+        sheet = self.sheet()
+        self.assertTrue(sheet.is_verified)
+        self.assertEqual(sheet.verification_method, "blind")
+        # Only the flagged answer was ever shown.
+        self.assertEqual(sheet.revealed, [4])
+
+    def test_blind_edit_changes_one_cell_and_confirms_it(self):
+        response = self.client.patch(
+            self.url + "?blind=1", {"answers": {"4": "fixed4"}, "blind": True}, format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn("fixed4", json.dumps(response.data))
+        sheet = self.sheet()
+        self.assertEqual(sheet.answers["4"]["accepted"], ["fixed4"])
+        self.assertEqual(sheet.answers["1"]["accepted"], ["secret1"])
+        self.assertEqual(sheet.cell_status(4), "confirmed")
+        self.assertEqual(sheet.evidence["4"]["history"][-1]["to"], ["fixed4"])
+
+    def test_crop_is_404_without_a_picture(self):
+        response = self.client.get(f"{self.url}/cells/1/crop")
+        self.assertEqual(response.status_code, 404)
+
+    def test_students_cannot_reveal(self):
+        student = User.objects.create_user("student", password="pass-12345")
+        self.client.force_authenticate(student)
+        self.assertEqual(self.client.post(f"{self.url}/cells/1/reveal").status_code, 403)
+
+    def test_photo_read_votes_but_never_overwrites(self):
+        from exams import keysheet
+        from exams.marking import AnswerKey
+
+        parse = keysheet.SheetParse(
+            answers={4: AnswerKey(kind="text", accepted=("secret4",)),
+                     1: AnswerKey(kind="text", accepted=("misread1",))},
+            raw={4: "secret4", 1: "misread1"},
+            row_confidence={4: 0.99, 1: 0.99},
+        )
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        image = SimpleUploadedFile("key.png", b"\x89PNG fake", content_type="image/png")
+        with mock.patch.object(keysheet, "parse_sheet", return_value=parse):
+            response = self.client.post(self.url + "?blind=1", {"image": image})
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertNotIn("secret", json.dumps(response.data))
+        sheet = self.sheet()
+        self.assertEqual(sheet.answers["1"]["accepted"], ["secret1"])  # never replaced
+        self.assertEqual(sheet.evidence["4"]["agreement"], "agree")
+        self.assertEqual(sheet.evidence["4"]["reads"]["sheet"], "secret4")
+
+
+class CorrectAfterAttemptTests(APITestCase):
+    def test_fixing_a_key_from_the_results_page_remarks_and_stays_verified(self):
+        admin = User.objects.create_user("admin-user", password="pass-12345", is_staff=True)
+        module = build_module(verified=True, published=True)
+        self.client.force_authenticate(admin)
+        attempt_id = self.client.post(
+            f"/api/exams/modules/{module.pk}/attempts", {}, format="json",
+        ).data["attempt"]["id"]
+        self.client.patch(
+            f"/api/exams/attempts/{attempt_id}/answers",
+            {"answers": [{"question_number": 2, "value": {"text": "real2"}}]}, format="json",
+        )
+        self.assertEqual(
+            self.client.post(f"/api/exams/attempts/{attempt_id}/submit").data["raw_score"], 0,
+        )
+
+        response = self.client.post(
+            f"/api/exams/admin/modules/{module.pk}/answer-sheet/correct",
+            {"number": 2, "accepted": "real2"}, format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["remarked_attempts"], 1)
+        sheet = AnswerKeySheet.objects.get(module=module)
+        self.assertTrue(sheet.is_verified)
+        self.assertEqual(sheet.answers["2"]["accepted"], ["real2"])
+        self.assertEqual(
+            self.client.get(f"/api/exams/attempts/{attempt_id}/result").data["raw_score"], 1,
+        )
+
+    def test_students_cannot_correct_keys(self):
+        module = build_module()
+        student = User.objects.create_user("student", password="pass-12345")
+        self.client.force_authenticate(student)
+        response = self.client.post(
+            f"/api/exams/admin/modules/{module.pk}/answer-sheet/correct",
+            {"number": 1, "accepted": "x"}, format="json",
+        )
+        self.assertEqual(response.status_code, 403)

@@ -161,3 +161,29 @@ class RealisticNoteCompletionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OcrBoxTests(unittest.TestCase):
+    """RapidOCR can hand over a whole detected line as one box."""
+
+    def ocr_line(self, *texts):
+        words, x = [], 40.0
+        for index, text in enumerate(texts):
+            width = 7.0 * len(text)
+            words.append(Word(text, x, 100, x + width, 112, confidence=0.9, segment=index))
+            x += width + 6
+        return Line(words)
+
+    def test_number_and_dots_inside_one_box(self):
+        result = to_template(self.ocr_line("7 ......... and toiletries"), range(1, 11))
+        self.assertEqual(result.numbers, [7])
+        self.assertIn("{{Q7}}", result.text)
+
+    def test_number_glued_to_the_word_before_it(self):
+        # "the 1 ......" with both the dots and the space lost.
+        result = to_template(self.ocr_line("Itemisaboutthe1"), range(1, 11))
+        self.assertEqual(result.numbers, [1])
+
+    def test_native_text_is_never_unglued(self):
+        native = Line([Word("COVID19", 40, 100, 90, 112)])
+        self.assertEqual(to_template(native, range(1, 40)).numbers, [])

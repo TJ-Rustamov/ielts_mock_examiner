@@ -25,14 +25,19 @@ import io
 from dataclasses import dataclass, field
 
 from exams import keygrammar
-from exams.importer.layout import read_page
+from exams.importer.layout import Line, read_page
 from exams.marking import AnswerKey
 
 __all__ = [
     "SheetParse",
+    "ColumnRead",
     "parse_sheet",
+    "ocr_columns",
+    "rows_from_columns",
     "find_image_gutters",
     "estimate_divider",
+    "estimate_dividers",
+    "line_boxes",
     "answers_to_json",
     "answers_from_json",
 ]
@@ -120,52 +125,210 @@ def estimate_divider(boxes: list[tuple[float, float]], width: float) -> float | 
     return None
 
 
-def _crop_columns(image_bytes: bytes, divider: float) -> list[bytes]:
-    from PIL import Image
+#: A column needs at least this many rows that start with a digit. Key columns
+#: always do; a strip of answers cut away from its numbers never does, which
+#: is what stops a recursive split between a number column and its answers.
+MIN_NUMBERED_ROWS = 3
 
-    image = Image.open(io.BytesIO(image_bytes))
-    width, height = image.size
-    cut = int(divider)
-    strips: list[bytes] = []
-    for left, right in ((0, cut), (cut, width)):
-        if right - left < width * 0.15:
-            continue
-        buffer = io.BytesIO()
-        image.crop((left, 0, right, height)).save(buffer, format="PNG")
-        strips.append(buffer.getvalue())
-    return strips or [image_bytes]
+#: Key pages run to three columns at most (landscape spreads).
+MAX_COLUMNS = 3
 
 
-def _split_image_columns(image_bytes: bytes, engine) -> list[bytes]:
-    """Crop the image into column strips before the real OCR pass.
+def line_boxes(words) -> list[tuple[float, float, str]]:
+    """Collapse words into (x0, x1, text) per detected line.
 
-    Costs one extra OCR pass, and is worth it. RapidOCR merges across the gutter
-    - it read "2  48 / forty-eight" together with the "B" beside it as the single
-    line "48 forty-eight B" - and once two columns are inside one detected box,
-    nothing downstream can separate them. Cropping first makes that impossible.
+    Column detection clusters on left edges, which only works on whole lines:
+    every line in a column starts at its margin, whereas the words inside a
+    line start anywhere. OCR words are grouped by the detection box they were
+    cut from, native words by PyMuPDF's (block, line); anything else stands
+    alone.
+    """
+    groups: dict[tuple, list] = {}
+    order: list[tuple] = []
+    for index, word in enumerate(words):
+        if getattr(word, "segment", -1) >= 0:
+            key = ("s", word.segment)
+        elif getattr(word, "has_structure", False):
+            key = ("b", word.block, word.line)
+        else:
+            key = ("w", index)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(word)
+    out = []
+    for key in order:
+        members = sorted(groups[key], key=lambda w: w.x0)
+        out.append((
+            min(w.x0 for w in members),
+            max(w.x1 for w in members),
+            " ".join(w.text for w in members),
+        ))
+    return out
 
-    A pure-white-channel test is not enough on its own: on a real key page the
-    long entries ("1 (the) 13(th) (of) January/ 13.01 / 13.1") reach into the
-    channel, so it is a valley rather than a gap. The line boxes say where the
-    columns actually start.
+
+def _starts_with_number(text: str) -> bool:
+    token = (text or "").split()[0] if (text or "").split() else ""
+    number, real_digit = keygrammar.repair_question_number(token.rstrip(".)&"), 99)
+    return number is not None and real_digit
+
+
+def estimate_dividers(
+    boxes: list[tuple[float, float, str]],
+    left: float,
+    right: float,
+    max_columns: int = MAX_COLUMNS,
+) -> list[float]:
+    """Column dividers between `left` and `right`, found recursively.
+
+    Each split must leave real key columns on both sides - at least
+    ``MIN_NUMBERED_ROWS`` lines starting with a question number - so a gap
+    between the numbers and their answers is never mistaken for a gutter.
+    """
+    if max_columns < 2:
+        return []
+    inside = [b for b in boxes if left <= b[0] < right]
+    width = right - left
+    at = estimate_divider([(b[0] - left, b[1] - left) for b in inside], width)
+    if at is None:
+        return []
+    at += left
+    left_side = [b for b in inside if b[0] <= at]
+    right_side = [b for b in inside if b[0] > at]
+    if any(b[2] for b in inside):
+        if sum(_starts_with_number(b[2]) for b in left_side) < MIN_NUMBERED_ROWS:
+            return []
+        if sum(_starts_with_number(b[2]) for b in right_side) < MIN_NUMBERED_ROWS:
+            return []
+    found = [at]
+    remaining = max_columns - 2
+    for side_left, side_right in ((left, at), (at, right)):
+        if remaining <= 0:
+            break
+        extra = estimate_dividers(boxes, side_left, side_right, remaining + 1)
+        found.extend(extra)
+        remaining -= len(extra)
+    return sorted(found)
+
+
+def _recognise(engine, image, page_width: float, page_height: float, preprocess: bool):
+    """Call an engine on an array, falling back to the plain PNG protocol.
+
+    :class:`~exams.importer.ocr.RapidOcrEngine` takes arrays and a
+    preprocessing switch; the :class:`~exams.importer.ocr.OcrEngine` protocol
+    only promises PNG bytes, so anything else gets those.
     """
     try:
-        from PIL import Image
+        return engine.recognise(image, page_width, page_height, preprocess_image=preprocess)
+    except TypeError:
+        return engine.recognise(_to_png(image), page_width, page_height)
 
-        width = Image.open(io.BytesIO(image_bytes)).size[0]
-    except Exception:  # pragma: no cover - depends on build flags
-        return [image_bytes]
+
+def _to_png(array) -> bytes:
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.fromarray(array).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+@dataclass
+class ColumnRead:
+    """A page read strip by strip. Lines are in page points, columns left to right."""
+
+    columns: list[list[Line]] = field(default_factory=list)
+    dividers: list[float] = field(default_factory=list)
+    confidence: float = 0.0
+    deskew_angle: float = 0.0
+
+
+def ocr_columns(
+    image_bytes: bytes,
+    engine,
+    page_width: float,
+    page_height: float,
+    words=None,
+) -> ColumnRead:
+    """OCR a key page one column strip at a time.
+
+    The page is cleaned once (deskew first, so the gutters are vertical), the
+    dividers are found from line boxes - `words` if the caller already has an
+    OCR pass of this exact render, otherwise a fresh pass - and each strip is
+    recognised on its own. Nothing can merge across a gutter that was cut
+    before recognition ran.
+
+    Never raises for a bad image; an unreadable page returns no columns.
+    """
+    read = ColumnRead()
+    try:
+        from exams.importer import ocr as ocr_module
+
+        if ocr_module.preprocessing_enabled():
+            array, read.deskew_angle = ocr_module.preprocess(image_bytes)
+        else:
+            array = ocr_module._load_rgb(image_bytes)
+    except Exception:  # pragma: no cover - missing cv2/numpy
+        return read
+
+    pixel_height, pixel_width = array.shape[:2]
+    if not pixel_width or page_width <= 0:
+        return read
+    px_per_pt = pixel_width / page_width
 
     try:
-        # Ask for coordinates in pixels by passing the pixel size as the page size.
-        words, _confidence = engine.recognise(image_bytes, float(width), 1.0)
-    except Exception:  # pragma: no cover - engine dependent
-        return [image_bytes]
+        if words is None:
+            words, _confidence = _recognise(engine, array, page_width, page_height, False)
+        dividers = estimate_dividers(line_boxes(words), 0.0, page_width)
+    except Exception:  # pragma: no cover - engine/runtime dependent
+        return read
+    read.dividers = dividers
 
-    divider = estimate_divider([(w.x0, w.x1) for w in words], float(width))
-    if divider is None:
-        return [image_bytes]
-    return _crop_columns(image_bytes, divider)
+    edges = [0.0, *dividers, page_width]
+    confidences: list[float] = []
+    for x0_pt, x1_pt in zip(edges[:-1], edges[1:]):
+        x0_px, x1_px = int(round(x0_pt * px_per_pt)), int(round(x1_pt * px_per_pt))
+        if x1_px - x0_px < max(8, pixel_width * 0.08):
+            continue
+        strip = array[:, x0_px:x1_px]
+        strip_width = (x1_px - x0_px) / px_per_pt
+        try:
+            local, confidence = _recognise(engine, strip, strip_width, page_height, False)
+        except Exception:  # pragma: no cover - engine/runtime dependent
+            continue
+        if not local:
+            read.columns.append([])
+            continue
+        confidences.append(confidence)
+        lines = read_page(local, strip_width)
+        offset = x0_px / px_per_pt
+        read.columns.append([
+            Line([_shift(word, offset) for word in line.words]) for line in lines
+        ])
+    read.confidence = sum(confidences) / len(confidences) if confidences else 0.0
+    return read
+
+
+def _shift(word, dx: float):
+    from dataclasses import replace
+
+    return replace(word, x0=word.x0 + dx, x1=word.x1 + dx)
+
+
+def rows_from_columns(read: ColumnRead, page: int | None = None) -> list[keygrammar.KeyRow]:
+    """Flatten a column read into key rows, column by column."""
+    rows: list[keygrammar.KeyRow] = []
+    for column, lines in enumerate(read.columns):
+        for line in lines:
+            if not line.words or not line.text.strip():
+                continue
+            rows.append(keygrammar.KeyRow(
+                text=line.text,
+                confidence=min(w.confidence for w in line.words),
+                page=page,
+                bbox=(line.x0, line.y0, line.x1, line.y1),
+                column=column,
+            ))
+    return rows
 
 
 @dataclass
@@ -176,6 +339,10 @@ class SheetParse:
     missing: list[int] = field(default_factory=list)
     confidence: float = 0.0
     text: str = ""
+    #: Per answer: lowest OCR confidence of its rows, and where it sits in
+    #: the image (in the page-point space of ``page_width``).
+    row_confidence: dict[int, float] = field(default_factory=dict)
+    crops: dict[int, dict] = field(default_factory=dict)
 
     @property
     def found(self) -> int:
@@ -191,6 +358,9 @@ def parse_sheet(
     page_height: float = ASSUMED_PAGE_HEIGHT,
 ) -> SheetParse:
     """OCR an answer-sheet image and parse it into answers.
+
+    `page_height` is accepted for compatibility; the height actually used
+    follows the image's aspect ratio at `page_width`.
 
     Never raises for a bad image: an unreadable sheet comes back with no answers
     and a warning saying so, which the admin sees as an empty grid to fill in by
@@ -209,46 +379,60 @@ def parse_sheet(
             return result
 
     # Split the columns in the image before OCR, then read each strip in order.
-    strips = _split_image_columns(image_bytes, engine)
-    if len(strips) > 1:
-        result.warnings.append(f"read as {len(strips)} columns")
+    # The page size keeps the image's own aspect ratio, so geometry in points
+    # means the same thing as on a PDF page.
+    try:
+        from PIL import Image
 
-    chunks: list[str] = []
-    confidences: list[float] = []
-    for strip in strips:
-        try:
-            words, confidence = engine.recognise(strip, page_width, page_height)
-        except Exception as exc:  # pragma: no cover - engine/runtime dependent
-            result.warnings.append(f"could not read the image: {exc}")
-            result.missing = list(range(1, total + 1))
-            return result
-        if not words:
-            continue
-        confidences.append(confidence)
-        chunks.append(chr(10).join(line.text for line in read_page(words, page_width)))
+        pixel_width, pixel_height = Image.open(io.BytesIO(image_bytes)).size
+        page_height = page_width * pixel_height / max(pixel_width, 1)
+    except Exception:
+        result.warnings.append("the image could not be opened")
+        result.missing = list(range(1, total + 1))
+        return result
 
-    result.confidence = sum(confidences) / len(confidences) if confidences else 0.0
-    if not chunks:
+    read = ocr_columns(image_bytes, engine, page_width, page_height)
+    if len(read.columns) > 1:
+        result.warnings.append(f"read as {len(read.columns)} columns")
+    rows = rows_from_columns(read)
+    result.confidence = read.confidence
+    if not rows:
         result.warnings.append("no text was found in the image")
         result.missing = list(range(1, total + 1))
         return result
 
-    result.text = chr(10).join(chunks)
+    result.text = chr(10).join(row.text for row in rows)
 
-    parsed = keygrammar.parse_answer_key(
-        result.text, total=total, expected_kinds=expected_kinds
-    )
+    # Row by row first - it is order-independent and knows where each answer
+    # sits - then the flat scanner for anything the rows could not place.
+    parsed = keygrammar.parse_answer_rows(rows, total=total, expected_kinds=expected_kinds)
+    flat = keygrammar.parse_answer_key(result.text, total=total, expected_kinds=expected_kinds)
+    for number, key in flat.keys.items():
+        if number not in parsed.keys and number not in parsed.conflicts:
+            parsed.keys[number] = key
+            parsed.raw[number] = flat.raw.get(number, "")
     result.answers = parsed.keys
     result.raw = parsed.raw
+    result.row_confidence = parsed.confidence
+    result.crops = parsed.crops
     result.warnings.extend(parsed.warnings)
-    result.missing = parsed.missing
+    result.missing = sorted(set(range(1, total + 1)) - set(parsed.keys))
 
-    if parsed.missing:
+    if result.missing:
         result.warnings.append(
-            f"{len(parsed.missing)} answer(s) could not be read and need typing in: "
-            f"{parsed.missing[:12]}"
+            f"{len(result.missing)} answer(s) could not be read and need typing in: "
+            f"{result.missing[:12]}"
         )
     return result
+
+
+def same_answer(a: dict, b: dict) -> bool:
+    """Whether two stored answers (JSON form) accept the same thing."""
+    def signature(value: dict) -> tuple:
+        accepted = {" ".join(str(x).lower().split()) for x in (value or {}).get("accepted") or []}
+        return ((value or {}).get("kind") == "letter_set", tuple(sorted(accepted)))
+
+    return signature(a) == signature(b)
 
 
 # ---------------------------------------------------------------------------

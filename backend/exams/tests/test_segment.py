@@ -206,3 +206,37 @@ class LegendDroppingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OcrSpacingTests(unittest.TestCase):
+    """RapidOCR drops narrow spaces; the anchors must survive that."""
+
+    def test_glued_headings_still_segment(self):
+        pages = {
+            1: page("Test1", "LISTENING", "PART1Questions1-10", "Complete the notes below.",
+                    "1 ......", "PART 2 Questions11-20"),
+            2: page("Listening and Reading answerkeys", "TEST1", "LISTENING", "1 mining"),
+        }
+        document = segment(pages)
+        self.assertEqual([t.number for t in document.tests], [1])
+        module = document.tests[0].modules[LISTENING]
+        self.assertEqual([s.order for s in module.sections], [1, 2])
+        self.assertIn("keys", document.back_matter)
+
+    def test_a_space_inserted_inside_a_heading(self):
+        pages = {1: page("Test 1", "LISTENIN G", "PART 1", "Questions 1-10",
+                         "Complete the notes below.", "1 ......")}
+        self.assertIn(LISTENING, segment(pages).tests[0].modules)
+
+    def test_long_content_lines_are_never_compacted(self):
+        from exams.importer.segment import is_structural_anchor
+
+        self.assertFalse(is_structural_anchor("Section 2 of the report covers the history"))
+        self.assertTrue(is_structural_anchor("TEST 1"))
+
+    def test_questions_n_and_m_header_opens_a_group(self):
+        pages = {1: page("Test 1", "LISTENING", "PART 3", "Questions 21 and 22",
+                         "Choose TWO letters, A-E.", "A one", "B two")}
+        module = segment(pages).tests[0].modules[LISTENING]
+        groups = module.sections[0].groups
+        self.assertEqual((groups[0].first_question, groups[0].last_question), (21, 22))

@@ -171,10 +171,14 @@ class ResultSerializer(serializers.Serializer):
 
 
 class AnswerKeySheetSerializer(serializers.ModelSerializer):
+    """The full sheet, answers included. Admin only, and not for blind review."""
+
     image_url = serializers.SerializerMethodField()
     answered_count = serializers.IntegerField(read_only=True)
     missing_numbers = serializers.ListField(read_only=True)
     edited_numbers = serializers.SerializerMethodField()
+    status_counts = serializers.SerializerMethodField()
+    statuses = serializers.SerializerMethodField()
 
     class Meta:
         model = AnswerKeySheet
@@ -182,12 +186,22 @@ class AnswerKeySheetSerializer(serializers.ModelSerializer):
             "id", "module", "image_url", "answers", "proposed_answers",
             "proposal_source", "raw_text",
             "ocr_confidence", "warnings", "is_verified", "verified_at",
-            "answered_count", "missing_numbers", "edited_numbers",
+            "verification_method", "answered_count", "missing_numbers",
+            "edited_numbers", "evidence", "revealed", "confirmed",
+            "status_counts", "statuses",
         ]
         read_only_fields = [
             "module", "proposed_answers", "proposal_source", "raw_text",
-            "ocr_confidence",
+            "ocr_confidence", "evidence", "revealed", "confirmed",
+            "verification_method",
         ]
+
+    def get_status_counts(self, sheet) -> dict:
+        return sheet.status_counts()
+
+    def get_statuses(self, sheet) -> dict[str, str]:
+        total = sheet.module.total_questions or 40
+        return {str(n): sheet.cell_status(n) for n in range(1, total + 1)}
 
     def get_image_url(self, sheet) -> str | None:
         if not sheet.image:
@@ -197,6 +211,48 @@ class AnswerKeySheetSerializer(serializers.ModelSerializer):
 
     def get_edited_numbers(self, sheet) -> list[int]:
         return sheet.edited_numbers()
+
+
+class BlindAnswerKeySheetSerializer(serializers.ModelSerializer):
+    """The sheet for someone who will sit the test: statuses, never answers.
+
+    No answers, no proposals, no raw OCR text, no import notes (they quote
+    answers), and per question only the *names* of the checks and how they
+    came out. An answer is shown only through the reveal endpoint, one at a
+    time, and every reveal is recorded.
+    """
+
+    image_url = serializers.SerializerMethodField()
+    answered_count = serializers.IntegerField(read_only=True)
+    missing_numbers = serializers.ListField(read_only=True)
+    status_counts = serializers.SerializerMethodField()
+    cells = serializers.SerializerMethodField()
+    notes_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AnswerKeySheet
+        fields = [
+            "id", "module", "image_url", "proposal_source", "is_verified",
+            "verified_at", "verification_method", "answered_count",
+            "missing_numbers", "revealed", "confirmed", "status_counts", "cells",
+            "notes_count",
+        ]
+        read_only_fields = fields
+
+    def get_image_url(self, sheet) -> str | None:
+        # The uploaded photo *is* the answer key; in blind mode it stays out.
+        return None
+
+    def get_status_counts(self, sheet) -> dict:
+        return sheet.status_counts()
+
+    def get_cells(self, sheet) -> dict:
+        from exams.keyreview import masked_cells
+
+        return masked_cells(sheet)
+
+    def get_notes_count(self, sheet) -> int:
+        return len(sheet.warnings or [])
 
 
 class AudioAssetSerializer(serializers.ModelSerializer):
@@ -231,11 +287,17 @@ class AdminModuleSerializer(ModuleSummarySerializer):
     blocking_problems = serializers.SerializerMethodField()
     has_answer_sheet = serializers.SerializerMethodField()
     answer_sheet_verified = serializers.SerializerMethodField()
+    answer_sheet_counts = serializers.SerializerMethodField()
 
     class Meta(ModuleSummarySerializer.Meta):
         fields = ModuleSummarySerializer.Meta.fields + [
             "blocking_problems", "has_answer_sheet", "answer_sheet_verified",
+            "answer_sheet_counts",
         ]
+
+    def get_answer_sheet_counts(self, module) -> dict | None:
+        sheet = getattr(module, "answer_sheet", None)
+        return sheet.status_counts() if sheet else None
 
     def get_blocking_problems(self, module) -> list[str]:
         return module.blocking_problems()

@@ -13,7 +13,8 @@ import threading
 import traceback
 
 from django.core.files.base import ContentFile
-from django.db import connection, transaction
+from django.db import connection, models, transaction
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
@@ -23,8 +24,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import IsStaffOrSuperuser
-from exams import keysheet, services
+from exams import keyreview, keysheet, services
 from exams.importer import pipeline
+from exams.importer.ocr import try_get_engine
 from exams.importer.publish import publish_payload
 from exams.models import (
     LISTENING,
@@ -38,6 +40,7 @@ from exams.models import (
 from exams.serializers import (
     AdminModuleSerializer,
     AnswerKeySheetSerializer,
+    BlindAnswerKeySheetSerializer,
     AudioAssetSerializer,
     ImportJobSerializer,
 )
@@ -61,9 +64,17 @@ def _run_import(job_id: int) -> None:
             def progress(message: str) -> None:
                 ImportJob.objects.filter(pk=job_id).update(stage=message)
 
+            # Scanned books are the common case, so OCR is always offered. The
+            # pipeline only spends it on pages with no text layer and on key
+            # pages that need a second, column-aware read; a book with a real
+            # text layer never touches it.
+            engine, ocr_warning = try_get_engine()
             result = pipeline.run(
-                job.source_file.path, slug=job.book_slug, progress=progress
+                job.source_file.path, slug=job.book_slug, ocr_engine=engine,
+                progress=progress,
             )
+            if ocr_warning:
+                result.warnings.insert(0, ocr_warning)
             job.refresh_from_db()
             job.payload = result.payload
             job.payload_version += 1
@@ -101,10 +112,14 @@ class ImportJobListCreateAPIView(APIView):
         digest = hashlib.sha256(payload).hexdigest()
 
         # Re-uploading the same book returns the existing job rather than
-        # spending minutes redoing identical work.
+        # spending minutes redoing identical work - unless the parser has
+        # improved since, in which case the old draft is exactly what the
+        # re-upload is meant to replace.
         existing = ImportJob.objects.filter(
             content_hash=digest,
             status__in=[ImportJob.NEEDS_REVIEW, ImportJob.PUBLISHED, ImportJob.RUNNING],
+        ).filter(
+            models.Q(status=ImportJob.RUNNING) | models.Q(parser_version=pipeline.PARSER_VERSION)
         ).first()
         if existing is not None:
             return Response(ImportJobSerializer(existing).data)
@@ -157,12 +172,28 @@ class ImportJobPublishAPIView(APIView):
 # ---------------------------------------------------------------------------
 
 
+def _is_blind(request) -> bool:
+    value = request.query_params.get("blind") or (
+        request.data.get("blind") if hasattr(request, "data") and isinstance(request.data, dict)
+        else None
+    )
+    return str(value).lower() in ("1", "true", "yes")
+
+
+def _sheet_payload(request, sheet, blind: bool) -> dict:
+    serializer = BlindAnswerKeySheetSerializer if blind else AnswerKeySheetSerializer
+    return serializer(sheet, context={"request": request}).data
+
+
 class AnswerSheetAPIView(APIView):
     """Upload, read and correct one module's answer sheet.
 
     POST an image -> OCR proposes answers -> PATCH corrections -> POST verify.
     Nothing here trusts OCR: `answers` starts as OCR's proposal but the module
     stays unpublishable until `is_verified` is set by a human.
+
+    ``?blind=1`` (or ``blind: true`` in a body) swaps every response for the
+    spoiler-free serializer: statuses and check names, never an answer.
     """
 
     permission_classes = ADMIN
@@ -171,12 +202,16 @@ class AnswerSheetAPIView(APIView):
     def get(self, request, module_id: int):
         module = get_object_or_404(Module, pk=module_id)
         sheet = getattr(module, "answer_sheet", None)
+        module_data = AdminModuleSerializer(module, context={"request": request}).data
         if sheet is None:
-            return Response({"sheet": None, "module": AdminModuleSerializer(
-                module, context={"request": request}).data})
+            return Response({"sheet": None, "module": module_data})
+        if not (sheet.evidence or {}) and sheet.answers:
+            # A sheet from before the self-checks existed: give it verdicts.
+            keyreview.recheck(sheet)
         return Response({
-            "sheet": AnswerKeySheetSerializer(sheet, context={"request": request}).data,
-            "module": AdminModuleSerializer(module, context={"request": request}).data,
+            "sheet": _sheet_payload(request, sheet, _is_blind(request)),
+            "module": module_data,
+            "blind": _is_blind(request),
         })
 
     def post(self, request, module_id: int):
@@ -195,27 +230,60 @@ class AnswerSheetAPIView(APIView):
         sheet.image.save(upload.name, ContentFile(data), save=False)
 
         existing = dict(sheet.answers or {})
+        evidence = {k: dict(v) for k, v in (sheet.evidence or {}).items() if isinstance(v, dict)}
         filled = 0
         ocr_used = False
 
-        # Only OCR the gaps. Where the book had a text layer the importer has
-        # already filled this grid, and it is far more accurate than OCR of the
-        # same page as an image - 40/40 against roughly 13/40 on Cambridge 21.
-        # Re-reading the image would replace good answers with worse ones.
-        missing_before = [n for n in range(1, total + 1) if str(n) not in existing]
-        if missing_before:
-            parsed = keysheet.parse_sheet(data, total=total)
-            ocr_used = True
-            for number, key in keysheet.answers_to_json(parsed.answers).items():
-                if number not in existing:
-                    existing[number] = key
-                    filled += 1
-            sheet.raw_text = {**(sheet.raw_text or {}),
-                              **{str(k): v for k, v in parsed.raw.items()}}
-            sheet.ocr_confidence = parsed.confidence
-            sheet.warnings = parsed.warnings[:60]
+        # The image is read every time, but it only *fills gaps*. Where the
+        # book had a text layer the importer has already filled this grid, and
+        # that is far more accurate than OCR of the same page as an image -
+        # 40/40 against roughly 13/40 on Cambridge 21 - so re-reading must
+        # never replace good answers with worse ones. What the read does for
+        # answers already present is vote: agreeing with an OCR'd key is
+        # evidence for it, disagreeing flags it.
+        expected = {
+            int(n): v.get("kind") for n, v in existing.items()
+            if isinstance(v, dict) and str(n).isdigit()
+        }
+        parsed = keysheet.parse_sheet(data, total=total, expected_kinds=expected)
+        ocr_used = True
+        page_width = keysheet.ASSUMED_PAGE_WIDTH
+        for number, key in keysheet.answers_to_json(parsed.answers).items():
+            n = int(number)
+            raw = parsed.raw.get(n, "")
+            entry = evidence.setdefault(number, {})
+            reads = dict(entry.get("reads") or {})
+            reads["sheet"] = raw
+            entry["reads"] = reads
+            if number not in existing:
+                existing[number] = key
+                filled += 1
+                entry.update({
+                    "source": "sheet",
+                    "read": "sheet",
+                    "confidence": parsed.row_confidence.get(n),
+                    "agreement": None,
+                    "independent": None,
+                    "filled": False,
+                })
+                crop = parsed.crops.get(n)
+                entry["crop"] = (
+                    {**crop, "image": True, "page_width": page_width} if crop else None
+                )
+            elif entry.get("source") in ("ocr", "embedded", "sheet"):
+                same = keysheet.same_answer(existing[number], key)
+                if entry.get("agreement") != "disagree":
+                    entry["agreement"] = "agree" if same else "disagree"
+                    # A photo read by this engine is independent of a scan's
+                    # embedded layer, not of this engine's own PDF read.
+                    entry["independent"] = entry.get("source") == "embedded"
+        sheet.raw_text = {**(sheet.raw_text or {}),
+                          **{str(k): v for k, v in parsed.raw.items()}}
+        sheet.ocr_confidence = parsed.confidence
+        sheet.warnings = list(dict.fromkeys((sheet.warnings or []) + parsed.warnings))[-60:]
 
         sheet.answers = existing
+        sheet.evidence = evidence
         if not sheet.proposed_answers:
             sheet.proposed_answers = dict(existing)
         if not sheet.proposal_source:
@@ -224,18 +292,22 @@ class AnswerSheetAPIView(APIView):
         sheet.is_verified = False
         sheet.verified_by = None
         sheet.verified_at = None
+        sheet.verification_method = ""
         sheet.save()
+        keyreview.recheck(sheet)
 
+        blind = _is_blind(request)
         return Response({
-            "sheet": AnswerKeySheetSerializer(sheet, context={"request": request}).data,
+            "sheet": _sheet_payload(request, sheet, blind),
             "read": len(existing),
             "filled_by_ocr": filled,
             "total": total,
             "missing": sheet.missing_numbers,
+            "blind": blind,
         }, status=status.HTTP_201_CREATED)
 
     def patch(self, request, module_id: int):
-        """Apply the admin's corrections to the grid."""
+        """Apply the admin's corrections and/or confirmations to the grid."""
         module = get_object_or_404(Module, pk=module_id)
         sheet = getattr(module, "answer_sheet", None)
         if sheet is None:
@@ -243,24 +315,112 @@ class AnswerSheetAPIView(APIView):
                           status.HTTP_404_NOT_FOUND)
 
         answers = request.data.get("answers")
-        if not isinstance(answers, dict):
+        confirm = request.data.get("confirm")
+        if answers is None and confirm is None:
+            return _error("invalid_answers", "send 'answers' and/or 'confirm'")
+        if answers is not None and not isinstance(answers, dict):
             return _error("invalid_answers", "answers must be an object keyed by "
                                              "question number")
-        cleaned, problems = _clean_answer_grid(answers, module.total_questions or 40)
-        if problems:
-            return _error("invalid_answers", "; ".join(problems[:5]))
+        if confirm is not None and not isinstance(confirm, list):
+            return _error("invalid_confirm", "confirm must be a list of question numbers")
 
-        sheet.answers = cleaned
-        # Any edit invalidates a previous confirmation.
-        sheet.is_verified = False
-        sheet.verified_by = None
-        sheet.verified_at = None
-        sheet.save(update_fields=[
-            "answers", "is_verified", "verified_by", "verified_at", "updated_at",
-        ])
-        return Response(
-            AnswerKeySheetSerializer(sheet, context={"request": request}).data
-        )
+        if answers is not None:
+            cleaned, problems = _clean_answer_grid(answers, module.total_questions or 40)
+            if problems:
+                return _error("invalid_answers", "; ".join(problems[:5]))
+            if _is_blind(request):
+                # Blind edits arrive one cell at a time; keep the rest.
+                cleaned = {**(sheet.answers or {}), **cleaned}
+            before = dict(sheet.answers or {})
+            sheet.answers = cleaned
+            keyreview.record_edits(sheet, before, request.user)
+            # Any edit invalidates a previous confirmation.
+            sheet.is_verified = False
+            sheet.verified_by = None
+            sheet.verified_at = None
+            sheet.verification_method = ""
+        if confirm is not None:
+            keyreview.confirm(sheet, confirm)
+        keyreview.recheck(sheet, save=False)
+        sheet.save()
+        return Response(_sheet_payload(request, sheet, _is_blind(request)))
+
+
+class AnswerSheetRevealAPIView(APIView):
+    """Show one answer, with its evidence. Every reveal is recorded."""
+
+    permission_classes = ADMIN
+
+    def post(self, request, module_id: int, number: int):
+        module = get_object_or_404(Module, pk=module_id)
+        sheet = getattr(module, "answer_sheet", None)
+        if sheet is None:
+            return _error("no_sheet", "this module has no answer sheet",
+                          status.HTTP_404_NOT_FOUND)
+        if not 1 <= number <= (module.total_questions or 40):
+            return _error("bad_number", "no such question", status.HTTP_404_NOT_FOUND)
+        return Response(keyreview.reveal(sheet, number))
+
+
+class AnswerSheetCropAPIView(APIView):
+    """The printed key row for one question, cut from the book PDF."""
+
+    permission_classes = ADMIN
+
+    def get(self, request, module_id: int, number: int):
+        module = get_object_or_404(Module, pk=module_id)
+        sheet = getattr(module, "answer_sheet", None)
+        if sheet is None:
+            return _error("no_sheet", "this module has no answer sheet",
+                          status.HTTP_404_NOT_FOUND)
+        try:
+            png = keyreview.render_crop(sheet, number)
+        except Exception:  # a damaged or missing PDF is a 404, not a 500
+            png = None
+        if not png:
+            return _error("no_crop", "no picture of this key row is available",
+                          status.HTTP_404_NOT_FOUND)
+        response = HttpResponse(png, content_type="image/png")
+        response["Cache-Control"] = "private, max-age=300"
+        return response
+
+
+class AnswerSheetCorrectAPIView(APIView):
+    """Fix one answer after sitting the test, and re-mark everyone.
+
+    For the results screen: the answers are already revealed there, and the
+    person is looking at the book's key row. The sheet stays verified.
+    """
+
+    permission_classes = ADMIN
+
+    def post(self, request, module_id: int):
+        module = get_object_or_404(Module, pk=module_id)
+        sheet = getattr(module, "answer_sheet", None)
+        if sheet is None:
+            return _error("no_sheet", "this module has no answer sheet",
+                          status.HTTP_404_NOT_FOUND)
+        try:
+            number = int(request.data.get("number"))
+        except (TypeError, ValueError):
+            return _error("bad_number", "number is required")
+        if not 1 <= number <= (module.total_questions or 40):
+            return _error("bad_number", "no such question")
+        accepted = request.data.get("accepted")
+        if isinstance(accepted, str):
+            from exams.keygrammar import expand_alternatives
+
+            accepted = list(expand_alternatives(accepted))
+        if not isinstance(accepted, list) or not [a for a in accepted if str(a).strip()]:
+            return _error("invalid_answers", "accepted must be a non-empty answer")
+
+        answer = keyreview.correct_after_attempt(sheet, number, accepted, request.user)
+        remarked = services.remark_module(module)
+        return Response({
+            "number": number,
+            "answer": answer,
+            "remarked_attempts": remarked,
+        })
 
 
 def _clean_answer_grid(answers: dict, total: int) -> tuple[dict, list[str]]:
@@ -329,11 +489,28 @@ class AnswerSheetVerifyAPIView(APIView):
                 f"{len(missing)} answer(s) are still empty: {missing[:10]}",
             )
 
+        mode = (request.data.get("mode") if isinstance(request.data, dict) else None) or "human"
+        if mode == AnswerKeySheet.BLIND:
+            # Blind verification: the person vouches for what they looked at,
+            # and the self-checks must vouch for everything else.
+            keyreview.recheck(sheet, save=False)
+            blockers = keyreview.blind_blockers(sheet)
+            if blockers:
+                sheet.save(update_fields=["evidence", "updated_at"])
+                return _error(
+                    "unchecked",
+                    f"{len(blockers)} answer(s) still need a look: {blockers[:12]}",
+                )
+        elif mode != AnswerKeySheet.HUMAN:
+            return _error("bad_mode", "mode must be 'human' or 'blind'")
+
         sheet.is_verified = True
         sheet.verified_by = request.user
         sheet.verified_at = timezone.now()
+        sheet.verification_method = mode
         sheet.save(update_fields=[
-            "is_verified", "verified_by", "verified_at", "updated_at",
+            "is_verified", "verified_by", "verified_at", "verification_method",
+            "evidence", "updated_at",
         ])
 
         # A key change means anything already submitted was marked against the

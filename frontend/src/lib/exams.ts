@@ -258,10 +258,14 @@ export function attemptAudioUrl(attemptId: number, sectionId: number) {
 
 // --- admin -----------------------------------------------------------------
 
+export type CellStatus = 'trusted' | 'check' | 'missing' | 'confirmed';
+export type StatusCounts = Record<CellStatus, number>;
+
 export interface AdminModule extends ModuleSummary {
   blocking_problems: string[];
   has_answer_sheet: boolean;
   answer_sheet_verified: boolean;
+  answer_sheet_counts: StatusCounts | null;
 }
 
 export interface SheetAnswer {
@@ -272,6 +276,32 @@ export interface SheetAnswer {
   set_numbers?: number[];
   select_count?: number | null;
 }
+
+export interface SheetCheck {
+  name: string;
+  result: 'pass' | 'warn' | 'fail';
+  note?: string;
+}
+
+export interface CellEvidence {
+  source?: string;
+  read?: string;
+  confidence?: number | null;
+  reads?: Record<string, string>;
+  agreement?: 'agree' | 'disagree' | null;
+  independent?: boolean | null;
+  filled?: boolean;
+  ocr_accepted?: string[];
+  check?: { status: CellStatus; checks: SheetCheck[]; correction?: KeyCorrection };
+}
+
+export interface KeyCorrection {
+  from: string[];
+  to: string[];
+  explained: boolean;
+}
+
+export type VerificationMethod = '' | 'human' | 'blind';
 
 export interface AnswerSheet {
   id: number;
@@ -285,9 +315,54 @@ export interface AnswerSheet {
   warnings: string[];
   is_verified: boolean;
   verified_at: string | null;
+  verification_method: VerificationMethod;
   answered_count: number;
   missing_numbers: number[];
   edited_numbers: number[];
+  evidence: Record<string, CellEvidence>;
+  revealed: number[];
+  confirmed: number[];
+  status_counts: StatusCounts;
+  statuses: Record<string, CellStatus>;
+}
+
+/** One question as the blind screen sees it: never the answer itself. */
+export interface BlindCell {
+  status: CellStatus;
+  kind: string;
+  set_numbers: number[];
+  checks: { name: string; result: SheetCheck['result'] }[];
+  source: string;
+  has_crop: boolean;
+  revealed: boolean;
+}
+
+export interface BlindSheet {
+  id: number;
+  module: number;
+  proposal_source: AnswerSheet['proposal_source'];
+  is_verified: boolean;
+  verified_at: string | null;
+  verification_method: VerificationMethod;
+  answered_count: number;
+  missing_numbers: number[];
+  revealed: number[];
+  confirmed: number[];
+  status_counts: StatusCounts;
+  cells: Record<string, BlindCell>;
+  notes_count: number;
+}
+
+export interface RevealedCell {
+  number: number;
+  status: CellStatus;
+  answer: SheetAnswer | null;
+  proposed: SheetAnswer | null;
+  raw_text: string;
+  evidence: CellEvidence;
+  check: { status?: CellStatus; checks?: SheetCheck[]; correction?: KeyCorrection };
+  history: { at: string; by: string; from: string[] | null; to: string[] | null }[];
+  has_crop: boolean;
 }
 
 export function listAdminModules(bookSlug?: string) {
@@ -319,6 +394,70 @@ export function uploadAnswerSheet(moduleId: number, file: File) {
   });
 }
 
+// --- blind review: confirm a key without reading it -------------------------
+
+export function getBlindAnswerSheet(moduleId: number) {
+  return fetchJson<{ sheet: BlindSheet | null; module: AdminModule }>(
+    `/api/exams/admin/modules/${moduleId}/answer-sheet?blind=1`,
+  );
+}
+
+export function uploadBlindAnswerSheet(moduleId: number, file: File) {
+  const form = new FormData();
+  form.append('image', file);
+  return fetchJson<{
+    sheet: BlindSheet; read: number; filled_by_ocr?: number; total: number; missing: number[];
+  }>(`/api/exams/admin/modules/${moduleId}/answer-sheet?blind=1`, {
+    method: 'POST',
+    body: form,
+  });
+}
+
+/** Show one answer. The server records every reveal. */
+export function revealAnswer(moduleId: number, number: number) {
+  return fetchJson<RevealedCell>(
+    `/api/exams/admin/modules/${moduleId}/answer-sheet/cells/${number}/reveal`,
+    { method: 'POST' },
+  );
+}
+
+/** Correct one cell without loading - or sending back - the rest of the key. */
+export function saveBlindCell(moduleId: number, number: number, value: string | SheetAnswer) {
+  return fetchJson<BlindSheet>(
+    `/api/exams/admin/modules/${moduleId}/answer-sheet?blind=1`,
+    { method: 'PATCH', body: JSON.stringify({ answers: { [String(number)]: value }, blind: true }) },
+  );
+}
+
+/** Accept answers as they are after looking at them. */
+export function confirmAnswers(moduleId: number, numbers: number[]) {
+  return fetchJson<BlindSheet>(
+    `/api/exams/admin/modules/${moduleId}/answer-sheet?blind=1`,
+    { method: 'PATCH', body: JSON.stringify({ confirm: numbers, blind: true }) },
+  );
+}
+
+/**
+ * The printed key row for one question, cut from the book. Behind auth like
+ * the audio, so it comes back as a blob URL the caller must revoke.
+ */
+export async function fetchKeyCropUrl(moduleId: number, number: number): Promise<string | null> {
+  const response = await fetch(
+    apiUrl(`/api/exams/admin/modules/${moduleId}/answer-sheet/cells/${number}/crop`),
+    { headers: authHeaders(false) },
+  );
+  if (!response.ok) return null;
+  return URL.createObjectURL(await response.blob());
+}
+
+/** Fix one answer from the results screen; submitted attempts are re-marked. */
+export function correctAnswerAfterAttempt(moduleId: number, number: number, accepted: string) {
+  return fetchJson<{ number: number; answer: SheetAnswer; remarked_attempts: number }>(
+    `/api/exams/admin/modules/${moduleId}/answer-sheet/correct`,
+    { method: 'POST', body: JSON.stringify({ number, accepted }) },
+  );
+}
+
 /** Send the corrected grid. Any edit clears the verified flag server-side. */
 export function saveAnswerSheet(
   moduleId: number,
@@ -330,10 +469,10 @@ export function saveAnswerSheet(
   );
 }
 
-export function verifyAnswerSheet(moduleId: number) {
+export function verifyAnswerSheet(moduleId: number, mode: 'human' | 'blind' = 'human') {
   return fetchJson<{ verified: boolean; remarked_attempts: number; module: AdminModule }>(
     `/api/exams/admin/modules/${moduleId}/answer-sheet/verify`,
-    { method: 'POST' },
+    { method: 'POST', body: JSON.stringify({ mode }) },
   );
 }
 

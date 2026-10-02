@@ -230,3 +230,32 @@ class MissLogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GluedRubricTests(unittest.TestCase):
+    """Rubrics whose spaces the recogniser dropped."""
+
+    def test_glued_rubrics_classify(self):
+        cases = [
+            ("Completethenotesbelow. WriteONEWORDAND/ORANUMBERforeachanswer.",
+             bp.NOTE_COMPLETION, "one_word_number"),
+            ("ChooseTWoletters,A-E.", bp.MCQ_MULTI, ""),
+            ("Complete thenotes below.", bp.NOTE_COMPLETION, ""),
+        ]
+        for text, kind, limit in cases:
+            with self.subTest(text=text):
+                result = classify(text)
+                self.assertEqual(result.type, kind)
+                self.assertEqual(result.word_limit, limit)
+                self.assertTrue(result.needs_review)
+
+    def test_letter_list_gives_a_range(self):
+        self.assertEqual(classify("Choose the correct letter, A, B or C.").letter_range,
+                         ("A", "C"))
+        self.assertEqual(classify("Choose thecorrectletter,A,Bor C.").letter_range, ("A", "C"))
+
+    def test_spaced_prose_is_not_read_glued(self):
+        from exams.importer.classify import looks_like_rubric
+
+        self.assertFalse(looks_like_rubric("The museum has someone worded badly."))
+        self.assertTrue(looks_like_rubric("Complete thenotes below."))

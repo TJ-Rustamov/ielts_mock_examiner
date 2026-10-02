@@ -65,6 +65,18 @@ urlpatterns = [
         "admin/modules/<int:module_id>/answer-sheet/verify",
         admin_views.AnswerSheetVerifyAPIView.as_view(), name="exam-answer-sheet-verify",
     ),
+    path(
+        "admin/modules/<int:module_id>/answer-sheet/cells/<int:number>/reveal",
+        admin_views.AnswerSheetRevealAPIView.as_view(), name="exam-answer-sheet-reveal",
+    ),
+    path(
+        "admin/modules/<int:module_id>/answer-sheet/cells/<int:number>/crop",
+        admin_views.AnswerSheetCropAPIView.as_view(), name="exam-answer-sheet-crop",
+    ),
+    path(
+        "admin/modules/<int:module_id>/answer-sheet/correct",
+        admin_views.AnswerSheetCorrectAPIView.as_view(), name="exam-answer-sheet-correct",
+    ),
     path("admin/audio", admin_views.AudioUploadAPIView.as_view(), name="exam-audio"),
     path(
         "admin/audio/<int:asset_id>",

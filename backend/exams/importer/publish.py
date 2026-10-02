@@ -133,6 +133,9 @@ def _publish_module(test: ExamTest, skill: str, data: dict, result: PublishResul
                 "label": section_data.get("label") or "",
                 "title": section_data.get("title") or "",
                 "passage_html": section_data.get("passage_text") or "",
+                # Listening audioscript. Used only to check answers; the
+                # student serializers never include it.
+                "transcript_text": section_data.get("transcript_text") or "",
                 "first_question": section_data.get("first_question") or 1,
                 "last_question": section_data.get("last_question") or 1,
             },
@@ -246,6 +249,7 @@ def _seed_answer_sheet(module: Module, data: dict, result: PublishResult) -> Non
     published until someone has actually looked.
     """
     proposal: dict[str, dict] = {}
+    evidence: dict[str, dict] = {}
     for section_data in data.get("sections") or []:
         for group_data in section_data.get("groups") or []:
             for question_data in group_data.get("questions") or []:
@@ -261,6 +265,10 @@ def _seed_answer_sheet(module: Module, data: dict, result: PublishResult) -> Non
                     "set_numbers": list(key.get("set_numbers") or []),
                     "select_count": key.get("select_count"),
                 }
+                entry = dict(key.get("evidence") or {})
+                if key.get("check"):
+                    entry["check"] = key["check"]
+                evidence[str(number)] = entry
 
     if not proposal:
         return
@@ -274,16 +282,30 @@ def _seed_answer_sheet(module: Module, data: dict, result: PublishResult) -> Non
         return
 
     merged = dict(sheet.answers or {})
+    changed = {number for number, value in proposal.items() if merged.get(number) != value}
     merged.update(proposal)
     sheet.answers = merged
     sheet.proposed_answers = dict(merged)
     sheet.proposal_source = "pdf"
+    sheet.evidence = {**(sheet.evidence or {}), **evidence}
+    # A confirmation was of the old value; a re-import that changed the
+    # answer needs looking at again.
+    sheet.confirmed = [n for n in (sheet.confirmed or []) if str(n) not in changed]
+    notes = list(data.get("key_notes") or [])
     if not data.get("answer_key_reliable", True):
-        sheet.warnings = (sheet.warnings or []) + [
+        notes.append(
             "the key pages for this module did not parse cleanly - check every "
-            "answer against the sheet image"
-        ]
+            "flagged answer against the book"
+        )
+    if notes:
+        sheet.warnings = list(dict.fromkeys((sheet.warnings or []) + notes))[-60:]
     sheet.save()
+
+    # Re-run the checks against the rows as published, so the verdicts the
+    # review screen shows are the ones its own edits will be judged by.
+    from exams.keyreview import recheck
+
+    recheck(sheet)
 
 
 def _publish_group(

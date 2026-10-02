@@ -40,6 +40,10 @@ MIN_GUTTER_COVERAGE = 0.55
 #: this fraction of the line height.
 LINE_TOLERANCE = 0.6
 
+#: A word must reach this far into a gutter (as a fraction of its width, from
+#: either edge) before its line counts as crossing the columns.
+GUTTER_CORE_MARGIN = 0.25
+
 #: A block must cover this much of the page width before it counts as spanning
 #: the columns rather than being a long entry in one of them.
 FULL_WIDTH_RATIO = 0.6
@@ -226,7 +230,16 @@ def split_columns(lines: list[Line], gutters: list[tuple[float, float]],
             bucket.clear()
 
     def crosses_gutter(word: Word) -> bool:
-        return any(word.x0 < gx1 and word.x1 > gx0 for gx0, gx1 in gutters)
+        # Only the middle of the channel counts. A heading that really spans
+        # the columns runs straight through it, whereas the longest answer in
+        # a column routinely pokes a few points past where the occupancy
+        # histogram put the channel's edge - and treating that row as
+        # full-width welds it to the row beside it in the other column.
+        for gx0, gx1 in gutters:
+            margin = (gx1 - gx0) * GUTTER_CORE_MARGIN
+            if word.x0 < gx1 - margin and word.x1 > gx0 + margin:
+                return True
+        return False
 
     for line in lines:
         # A line built across the page may be two side-by-side column rows that

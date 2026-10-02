@@ -15,6 +15,7 @@ reliably, and every flagged group with the reason.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from collections import Counter
@@ -37,8 +38,12 @@ class Command(BaseCommand):
                             help="Output directory (default: alongside the PDF)")
         parser.add_argument("--first-page", type=int, default=None)
         parser.add_argument("--last-page", type=int, default=None)
-        parser.add_argument("--ocr", action="store_true", default=False,
-                            help="Enable OCR for pages with no text layer")
+        parser.add_argument("--no-ocr", dest="ocr", action="store_false", default=True,
+                            help="Disable OCR. By default it runs on pages with no "
+                                 "text layer and re-reads scanned answer-key pages")
+        # Accepted for old scripts; OCR is on by default now.
+        parser.add_argument("--ocr", dest="ocr", action="store_true", default=True,
+                            help=argparse.SUPPRESS)
 
     def handle(self, *args, **options):
         pdf = options["pdf"]
@@ -52,12 +57,11 @@ class Command(BaseCommand):
 
         ocr_engine = None
         if options["ocr"]:
-            try:
-                from exams.importer.ocr import get_engine
+            from exams.importer.ocr import try_get_engine
 
-                ocr_engine = get_engine()
-            except Exception as exc:  # pragma: no cover - environment dependent
-                self.stderr.write(self.style.WARNING(f"OCR unavailable: {exc}"))
+            ocr_engine, warning = try_get_engine()
+            if warning:  # pragma: no cover - environment dependent
+                self.stderr.write(self.style.WARNING(warning))
 
         result = pipeline.run(
             pdf,
@@ -96,6 +100,7 @@ class Command(BaseCommand):
         lines.append(
             f"pages {stats.get('pages', 0)}  "
             f"(text layer {stats.get('pages_with_text', 0)}, "
+            f"scan with embedded OCR layer {stats.get('pages_embedded_ocr', 0)}, "
             f"needed OCR {stats.get('pages_ocr', 0)})"
         )
         lines.append(
@@ -138,6 +143,15 @@ class Command(BaseCommand):
                     f"    answers {with_key}/{len(unique) or 1}"
                     f"    key: {key_label}"
                 )
+                trust = module.get("trust")
+                reads = module.get("key_reads") or {}
+                if trust:
+                    lines.append(
+                        f"    self-check: {trust.get('trusted', 0)} trusted, "
+                        f"{trust.get('check', 0)} to check, {trust.get('missing', 0)} missing"
+                        f"    (key from {reads.get('source', '?')}, "
+                        f"read: {', '.join(reads.get('reads', [])) or '-'})"
+                    )
                 lines.append(
                     "    types: "
                     + ", ".join(f"{name} x{count}" for name, count in types.most_common())

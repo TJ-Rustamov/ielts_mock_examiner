@@ -40,7 +40,7 @@ GAP_FACTOR = 3.0
 @dataclass
 class BlankSlot:
     number: int | None
-    #: Index into the line's word list where the blank was found.
+    #: Index into the line's token list where the blank was found.
     position: int
     #: True when inferred from spacing rather than read from dot characters.
     geometric: bool = False
@@ -69,6 +69,42 @@ def _median_gap(words: list[Word]) -> float:
     return gaps[len(gaps) // 2]
 
 
+def _tokens(words: list[Word]) -> list[tuple[str, Word, bool]]:
+    """Split each word box into its whitespace tokens.
+
+    Native words are single tokens. An OCR box can hold several - on a RapidOCR
+    build without character positions a whole detected line arrives as one
+    box ("7 ......... toiletries"). Splitting the text recovers the dot-run and
+    trailing-number rules; the geometric-gap rule then applies only *between*
+    boxes, where the gap was actually measured. Nothing inside a box gets a
+    made-up coordinate.
+
+    Returns (token, source word, token ends its box).
+    """
+    out: list[tuple[str, Word, bool]] = []
+    for word in words:
+        parts = word.text.split() or [word.text]
+        if word.segment >= 0:
+            parts = [piece for part in parts for piece in _unglue(part)]
+        for index, part in enumerate(parts):
+            out.append((part, word, index == len(parts) - 1))
+    return out
+
+
+#: A word with a question number glued to its end - "the1", "visit12" - which
+#: is how OCR delivers "the 1 ........" once it has dropped both the dots and
+#: the space. Letters first, so "10/ten" and "13th" are untouched.
+_GLUED_NUMBER = re.compile(r"^([A-Za-z][A-Za-z'’]*)(\d{1,2})$")
+
+
+def _unglue(token: str) -> list[str]:
+    """Split a trailing glued number off an OCR token. Native text never is."""
+    match = _GLUED_NUMBER.match(token)
+    if not match:
+        return [token]
+    return [match.group(1), match.group(2)]
+
+
 def to_template(
     line: Line,
     expected: range | set[int] | None = None,
@@ -88,13 +124,21 @@ def to_template(
 
     median = _median_gap(words)
     wide_gap = median * GAP_FACTOR if median > 0 else None
+    tokens = _tokens(words)
+
+    def gap_after(index: int) -> float | None:
+        """Measured gap after token `index`, or None inside one box."""
+        _text, word, ends_box = tokens[index]
+        if not ends_box or index + 1 >= len(tokens):
+            return None
+        return tokens[index + 1][1].x0 - word.x1
 
     parts: list[str] = []
     blanks: list[BlankSlot] = []
     warnings: list[str] = []
     index = 0
-    while index < len(words):
-        token = words[index].text
+    while index < len(tokens):
+        token = tokens[index][0]
 
         # "7..........." - number and dots fused into one token.
         fused = NUMBER_THEN_DOTS.match(token)
@@ -108,10 +152,10 @@ def to_template(
         number_match = NUMBER.match(token)
         if number_match and in_range(int(number_match.group(1))):
             number = int(number_match.group(1))
-            following = words[index + 1] if index + 1 < len(words) else None
+            following = tokens[index + 1][0] if index + 1 < len(tokens) else None
 
             # "7 ..........."
-            if following is not None and DOT_RUN.match(following.text):
+            if following is not None and DOT_RUN.match(following):
                 parts.append(f"{{{{Q{number}}}}}")
                 blanks.append(BlankSlot(number, index))
                 index += 2
@@ -119,11 +163,9 @@ def to_template(
 
             # "7      and toiletries" - the dots did not survive extraction but
             # the space they occupied did.
-            if (
-                following is not None
-                and wide_gap is not None
-                and (following.x0 - words[index].x1) >= wide_gap
-            ):
+            gap = gap_after(index)
+            if following is not None and wide_gap is not None and gap is not None \
+                    and gap >= wide_gap:
                 parts.append(f"{{{{Q{number}}}}}")
                 blanks.append(BlankSlot(number, index, geometric=True))
                 index += 1

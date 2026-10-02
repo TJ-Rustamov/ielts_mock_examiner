@@ -274,10 +274,19 @@ class AnswerKeySheet(models.Model):
     input OCR reads when a book has no text layer to parse.
     """
 
+    HUMAN = "human"
+    BLIND = "blind"
+    VERIFICATION_CHOICES = (
+        (HUMAN, "Every answer checked by a person"),
+        (BLIND, "Self-checks passed; a person checked only the flagged answers"),
+    )
+
     module = models.OneToOneField(
         Module, on_delete=models.CASCADE, related_name="answer_sheet"
     )
-    image = models.ImageField(upload_to="exam-answer-sheets/")
+    #: Optional: a book with a text layer, or a scan whose key pages the
+    #: importer read itself, fills the grid without anyone uploading a photo.
+    image = models.ImageField(upload_to="exam-answer-sheets/", blank=True)
     #: {"12": {"kind": "text", "accepted": ["cafe"], ...}} — keys are strings
     #: because JSON object keys always are. This is the confirmed key and the
     #: only thing marking reads.
@@ -294,6 +303,22 @@ class AnswerKeySheet(models.Model):
     raw_text = models.JSONField(default=dict, blank=True)
     ocr_confidence = models.FloatField(null=True, blank=True)
     warnings = models.JSONField(default=list, blank=True)
+    #: Per question: where the answer came from and what the self-checks made
+    #: of it - {"12": {"source": "ocr", "confidence": 0.93, "reads": {...},
+    #: "agreement": "agree", "crop": {"page": 118, "bbox": [...]},
+    #: "check": {"status": "trusted", "checks": [...]}, "history": [...]}}.
+    #: Never shown to students; the blind review screen shows the status and
+    #: check names without the answer.
+    evidence = models.JSONField(default=dict, blank=True)
+    #: Question numbers whose answer an admin has been shown, for the "you have
+    #: seen N answers" count and for audit.
+    revealed = models.JSONField(default=list, blank=True)
+    #: Question numbers an admin looked at and accepted (or corrected) after the
+    #: self-checks flagged them.
+    confirmed = models.JSONField(default=list, blank=True)
+    verification_method = models.CharField(
+        max_length=10, blank=True, default="", choices=VERIFICATION_CHOICES,
+    )
 
     is_verified = models.BooleanField(default=False)
     verified_by = models.ForeignKey(
@@ -323,6 +348,24 @@ class AnswerKeySheet(models.Model):
             if isinstance(value, dict) and value.get("accepted")
         }
         return sorted(set(range(1, total + 1)) - present)
+
+    def cell_status(self, number: int) -> str:
+        """trusted | check | missing | confirmed for one question."""
+        value = self.answers.get(str(number))
+        if not (isinstance(value, dict) and value.get("accepted")):
+            return "missing"
+        if number in set(self.confirmed or []):
+            return "confirmed"
+        check = (self.evidence.get(str(number)) or {}).get("check") or {}
+        return check.get("status") or "check"
+
+    def status_counts(self) -> dict[str, int]:
+        total = self.module.total_questions if self.module_id else QUESTIONS_PER_MODULE
+        counts = {"trusted": 0, "check": 0, "missing": 0, "confirmed": 0}
+        for number in range(1, total + 1):
+            status = self.cell_status(number)
+            counts[status] = counts.get(status, 0) + 1
+        return counts
 
     def edited_numbers(self) -> list[int]:
         """Question numbers a human changed from the proposal — shown in review."""

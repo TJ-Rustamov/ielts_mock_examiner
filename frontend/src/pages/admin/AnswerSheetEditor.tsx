@@ -5,12 +5,18 @@
  * otherwise from OCR of the uploaded image. Either way it is a proposal: the
  * test stays hidden from students until someone presses Verify here, and any
  * edit clears a previous verification.
+ *
+ * Blind mode (the default) is for an admin who will also sit the test: the
+ * answers stay hidden, and only the ones the self-checks flag are opened, one
+ * at a time - see BlindKeyReview.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowLeft, CheckCircle2, ImageUp, Loader2, Save, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, EyeOff, ImageUp, Loader2, Save, ShieldCheck } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
+import BlindKeyReview from '@/components/admin/BlindKeyReview';
+import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,8 +27,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  errorMessage, getAnswerSheet, saveAnswerSheet, uploadAnswerSheet, verifyAnswerSheet,
-  type AdminModule, type AnswerSheet, type SheetAnswer,
+  errorMessage, getAnswerSheet, getBlindAnswerSheet, saveAnswerSheet, uploadAnswerSheet,
+  verifyAnswerSheet,
+  type AdminModule, type AnswerSheet, type BlindSheet, type CellStatus, type SheetAnswer,
 } from '@/lib/exams';
 import { cn } from '@/lib/utils';
 
@@ -34,11 +41,40 @@ const SOURCE_LABELS: Record<string, string> = {
 
 const joinAccepted = (answer: SheetAnswer | undefined) => (answer?.accepted ?? []).join(' / ');
 
+const STATUS_DOT: Record<CellStatus, string> = {
+  trusted: 'bg-emerald-500',
+  confirmed: 'bg-sky-500',
+  check: 'bg-amber-500',
+  missing: 'bg-red-500',
+};
+
+const blindKey = (id: number) => `answer-sheet-blind:${id}`;
+
+/** Per-module memory of the blind switch. Storage can be unavailable; default on. */
+function readBlind(id: number): boolean {
+  try {
+    return localStorage.getItem(blindKey(id)) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+function writeBlind(id: number, value: boolean): void {
+  try {
+    localStorage.setItem(blindKey(id), value ? '1' : '0');
+  } catch {
+    // Not remembered - harmless.
+  }
+}
+
 const AnswerSheetEditor = () => {
   const { moduleId } = useParams();
   const id = Number(moduleId);
   const navigate = useNavigate();
 
+  const [blind, setBlind] = useState(() => readBlind(id));
+  const [blindSheet, setBlindSheet] = useState<BlindSheet | null>(null);
+  const [revealAllOpen, setRevealAllOpen] = useState(false);
   const [sheet, setSheet] = useState<AnswerSheet | null>(null);
   const [module, setModule] = useState<AdminModule | null>(null);
   const [grid, setGrid] = useState<Record<number, string>>({});
@@ -62,17 +98,43 @@ const AnswerSheetEditor = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await getAnswerSheet(id);
-      applySheet(response.sheet);
-      setModule(response.module);
+      if (blind) {
+        // Never fetch the full sheet in blind mode - the answers would be in
+        // the browser even if nothing rendered them.
+        const response = await getBlindAnswerSheet(id);
+        setBlindSheet(response.sheet);
+        setModule(response.module);
+      } else {
+        const response = await getAnswerSheet(id);
+        applySheet(response.sheet);
+        setModule(response.module);
+      }
     } catch (error) {
       toast.error(errorMessage(error, 'Could not load this answer key.'));
     } finally {
       setLoading(false);
     }
-  }, [id, applySheet]);
+  }, [id, blind, applySheet]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const changeBlind = (next: boolean) => {
+    if (!next) {
+      setRevealAllOpen(true);
+      return;
+    }
+    writeBlind(id, true);
+    setSheet(null);
+    setGrid({});
+    setBlind(true);
+  };
+
+  const revealAll = () => {
+    writeBlind(id, false);
+    setBlindSheet(null);
+    setBlind(false);
+    setRevealAllOpen(false);
+  };
 
   const total = module?.total_questions || 40;
   const numbers = useMemo(() => Array.from({ length: total }, (_, i) => i + 1), [total]);
@@ -169,21 +231,35 @@ const AnswerSheetEditor = () => {
               <span className="capitalize">{module?.skill ?? ''}</span> answer key
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {sheet?.is_verified
+              {blind && blindSheet?.is_verified && (
+                <Badge className="bg-emerald-600 hover:bg-emerald-600"><CheckCircle2 className="mr-1 h-3 w-3" /> Verified</Badge>
+              )}
+              {blind && blindSheet && !blindSheet.is_verified && (
+                <Badge className="bg-amber-500 hover:bg-amber-500">Not verified</Badge>
+              )}
+              {!blind && sheet?.is_verified
                 ? <Badge className="bg-emerald-600 hover:bg-emerald-600"><CheckCircle2 className="mr-1 h-3 w-3" /> Verified</Badge>
-                : <Badge className="bg-amber-500 hover:bg-amber-500">Not verified</Badge>}
-              {sheet?.proposal_source && (
+                : !blind && <Badge className="bg-amber-500 hover:bg-amber-500">Not verified</Badge>}
+              {!blind && sheet?.proposal_source && (
                 <Badge variant="outline">{SOURCE_LABELS[sheet.proposal_source] ?? sheet.proposal_source}</Badge>
               )}
-              <Badge variant="secondary">{total - missing.length} / {total} filled</Badge>
+              {!blind && sheet?.verification_method === 'blind' && (
+                <Badge variant="outline">Verified blind</Badge>
+              )}
+              {!blind && <Badge variant="secondary">{total - missing.length} / {total} filled</Badge>}
             </div>
-            {module && module.blocking_problems.length > 0 && (
+            {!blind && module && module.blocking_problems.length > 0 && (
               <p className="mt-2 text-xs text-muted-foreground">
                 Blocking publication: {module.blocking_problems.join('; ')}
               </p>
             )}
           </div>
-          <div className="flex gap-2">
+          <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+            <EyeOff className="h-4 w-4 text-muted-foreground" />
+            I'll sit this test - hide answers
+            <Switch checked={blind} onCheckedChange={changeBlind} aria-label="Hide answers" />
+          </label>
+          {!blind && <div className="flex gap-2">
             <Button variant="outline" onClick={save} disabled={!sheet || !dirty || saving}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Save
@@ -195,11 +271,20 @@ const AnswerSheetEditor = () => {
             >
               <ShieldCheck className="mr-2 h-4 w-4" /> Verify
             </Button>
-          </div>
+          </div>}
         </div>
 
         {loading ? (
           <Skeleton className="h-[600px] rounded-xl" />
+        ) : blind ? (
+          <BlindKeyReview
+            moduleId={id}
+            total={total}
+            sheet={blindSheet}
+            module={module}
+            onSheet={setBlindSheet}
+            onVerified={(next) => { setModule(next); void load(); }}
+          />
         ) : (
           <div className="grid gap-6 lg:grid-cols-2">
             <Card className="h-fit lg:sticky lg:top-6">
@@ -245,7 +330,8 @@ const AnswerSheetEditor = () => {
                 <CardTitle className="text-base">Accepted answers</CardTitle>
                 <p className="text-xs text-muted-foreground">
                   Separate alternatives with a slash, e.g. <code>10 / ten</code>. Amber marks an
-                  answer that differs from what was imported.
+                  answer that differs from what was imported. The dot is the self-check verdict:
+                  green passed, amber needs a look, blue checked by a person, red missing.
                 </p>
               </CardHeader>
               <CardContent className="space-y-1.5">
@@ -258,8 +344,16 @@ const AnswerSheetEditor = () => {
                   const answer = sheet?.answers?.[String(number)];
                   const empty = !(grid[number] ?? '').trim();
                   const edited = !!sheet && changedFromProposal(number);
+                  const status = sheet?.statuses?.[String(number)];
+                  const failing = (sheet?.evidence?.[String(number)]?.check?.checks ?? [])
+                    .filter((check) => check.result !== 'pass')
+                    .map((check) => `${check.name}: ${check.note || check.result}`);
                   return (
                     <div key={number} className="flex items-center gap-2">
+                      <span
+                        className={cn('h-2 w-2 shrink-0 rounded-full', status ? STATUS_DOT[status] : 'bg-muted')}
+                        title={[status, ...failing].filter(Boolean).join('\n')}
+                      />
                       <span className="w-7 text-right text-sm font-medium tabular-nums">{number}</span>
                       <Input
                         value={grid[number] ?? ''}
@@ -286,6 +380,22 @@ const AnswerSheetEditor = () => {
           </div>
         )}
       </div>
+
+      <AlertDialog open={revealAllOpen} onOpenChange={setRevealAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Show every answer?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This opens the full grid with all {total} answers. If you are going to sit this test,
+              stay in blind mode and open only the flagged ones.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay blind</AlertDialogCancel>
+            <AlertDialogAction onClick={revealAll}>Show all answers</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>

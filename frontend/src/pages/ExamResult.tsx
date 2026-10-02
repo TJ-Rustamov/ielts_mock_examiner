@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, CheckCircle2, Info, MinusCircle, RotateCcw, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Flag, Info, Loader2, MinusCircle, RotateCcw, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
 import Layout from '@/components/Layout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -11,11 +12,17 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import KeyCrop from '@/components/admin/KeyCrop';
 import GroupRenderer from '@/components/exam/GroupRenderer';
 import PassagePages from '@/components/exam/PassagePages';
+import { isAdminUser } from '@/lib/auth';
 import { useThemeContext } from '@/contexts/ThemeContext';
 import {
-  errorMessage, getAttempt, getResult,
+  correctAnswerAfterAttempt, errorMessage, getAttempt, getResult,
   type AnswerValue, type AttemptState, type ExamResult as ExamResultData,
   type ModuleContent, type ResultRow,
 } from '@/lib/exams';
@@ -49,6 +56,36 @@ const ExamResult = () => {
   const [result, setResult] = useState<ExamResultData | null>(null);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  // Staff who sat the test blind can fix a key the importer misread, here,
+  // against the book's own key row. Everyone's attempts are re-marked.
+  const canFixKey = isAdminUser();
+  const [fixing, setFixing] = useState<ResultRow | null>(null);
+  const [fixValue, setFixValue] = useState('');
+  const [savingFix, setSavingFix] = useState(false);
+
+  const openFix = (row: ResultRow) => {
+    setFixing(row);
+    setFixValue(row.accepted.join(' / '));
+  };
+
+  const saveFix = async () => {
+    if (!fixing || !attempt) return;
+    if (!fixValue.trim()) { toast.error('Type the correct answer.'); return; }
+    setSavingFix(true);
+    try {
+      const response = await correctAnswerAfterAttempt(attempt.module.id, fixing.number, fixValue.trim());
+      toast.success(
+        `Key for question ${fixing.number} corrected` +
+        (response.remarked_attempts ? `; ${response.remarked_attempts} attempt(s) re-marked.` : '.'),
+      );
+      setFixing(null);
+      setResult(await getResult(id));
+    } catch (err) {
+      toast.error(errorMessage(err, 'Could not correct the key.'));
+    } finally {
+      setSavingFix(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +226,7 @@ const ExamResult = () => {
                   <TableHead>Your answer</TableHead>
                   <TableHead>Accepted answer</TableHead>
                   <TableHead className="hidden sm:table-cell">Result</TableHead>
+                  {canFixKey && <TableHead className="w-10"><span className="sr-only">Fix key</span></TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -213,11 +251,27 @@ const ExamResult = () => {
                     <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
                       {REASON_LABELS[row.reason] ?? row.reason}
                     </TableCell>
+                    {canFixKey && (
+                      <TableCell>
+                        {!row.is_correct && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => openFix(row)}
+                            title="Key looks wrong? Check it against the book"
+                            aria-label={`Check the key for question ${row.number}`}
+                          >
+                            <Flag className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
                 {rows.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="py-6 text-center text-muted-foreground">
+                    <TableCell colSpan={canFixKey ? 5 : 4} className="py-6 text-center text-muted-foreground">
                       Nothing to show for this filter.
                     </TableCell>
                   </TableRow>
@@ -274,6 +328,48 @@ const ExamResult = () => {
           </section>
         )}
       </div>
+
+      {canFixKey && (
+        <Dialog open={fixing !== null} onOpenChange={(open) => { if (!open) setFixing(null); }}>
+          <DialogContent className="max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Key looks wrong? Question {fixing?.number}</DialogTitle>
+              <DialogDescription>
+                This is the book's printed key row. If the accepted answer was misread, correct it -
+                every submitted attempt on this test is re-marked.
+              </DialogDescription>
+            </DialogHeader>
+            {fixing && (
+              <div className="space-y-3">
+                <KeyCrop moduleId={attempt.module.id} number={fixing.number} />
+                <div className="text-sm">
+                  You answered <span className="font-medium">{fixing.response || '—'}</span>.
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" htmlFor="fix-answer">Accepted answer</label>
+                  <Input
+                    id="fix-answer"
+                    value={fixValue}
+                    onChange={(event) => setFixValue(event.target.value)}
+                    spellCheck={false}
+                    placeholder="Separate alternatives with a slash, e.g. 10 / ten"
+                  />
+                </div>
+              </div>
+            )}
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="ghost" onClick={() => setFixing(null)}>Cancel</Button>
+              <Button
+                onClick={() => void saveFix()}
+                disabled={savingFix || !fixing || fixValue.trim() === fixing.accepted.join(' / ')}
+              >
+                {savingFix && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Correct the key
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Layout>
   );
 };

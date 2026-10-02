@@ -37,17 +37,22 @@ _SPELLED = {
 
 # A test heading. Tolerates "Practice Test 2" and spelled-out numbers, which
 # older editions and non-Cambridge books use.
+#
+# Every gap is \s* rather than \s+ in the anchors below: RapidOCR's recogniser
+# drops spaces it judges narrow, and "TEST1" or "PART2Questions11-20" is what a
+# scanned book actually yields. A digit can never be followed by another digit
+# where a number ends, so (?!\d) does the job \b did before.
 _TEST = re.compile(
-    r"^(?:practice\s+)?test\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)"
+    r"^(?:practice\s*)?test\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)"
     r"\s*$",
     re.IGNORECASE,
 )
 
 # The skill header, optionally qualified ("ACADEMIC READING", "READING MODULE").
 _SKILL = re.compile(
-    r"^(?:academic\s+|general\s+training\s+)?"
+    r"^(?:academic\s*|general\s*training\s*)?"
     r"(listening|reading|writing|speaking)"
-    r"(?:\s+module)?\s*$",
+    r"(?:\s*module)?\s*$",
     re.IGNORECASE,
 )
 
@@ -62,32 +67,34 @@ _SKILL = re.compile(
 # Captured here and turned into a provisional group, which is dropped later
 # only if narrower groups turn out to cover it.
 _PART = re.compile(
-    r"^(?:part|section)\s+(\d+)\b"
-    r"(?:\s+questions?\s+(\d+)\s*[-–—]\s*(\d+))?\s*$",
+    r"^(?:part|section)\s*(\d+)(?!\d)"
+    r"(?:\s*,?\s*questions?\s*(\d+)\s*[-–—]\s*(\d+))?\s*$",
     re.IGNORECASE,
 )
 
 # Reading subsections. General Training uses SECTION here too, which is why the
 # skill context decides how a bare "SECTION n" is interpreted.
 _PASSAGE = re.compile(
-    r"^reading\s+passage\s+(\d+)\b"
-    r"(?:\s+questions?\s+(\d+)\s*[-–—]\s*(\d+))?\s*$",
+    r"^reading\s*passage\s*(\d+)(?!\d)"
+    r"(?:\s*,?\s*questions?\s*(\d+)\s*[-–—]\s*(\d+))?\s*$",
     re.IGNORECASE,
 )
 
+# "Questions 21 and 22" is how Cambridge heads a choose-TWO task; without the
+# "and" form those two questions had no group at all.
 _QUESTIONS = re.compile(
-    r"^questions?\s+(\d+)\s*[-–—]\s*(\d+)\s*$", re.IGNORECASE
+    r"^questions?\s*(\d+)\s*(?:[-–—]|and|&)\s*(\d+)\s*$", re.IGNORECASE
 )
-_QUESTION_ONE = re.compile(r"^question\s+(\d+)\s*$", re.IGNORECASE)
+_QUESTION_ONE = re.compile(r"^question\s*(\d+)\s*$", re.IGNORECASE)
 
 # Back matter. "Tapescript" is what pre-2010 Cambridge editions call the
 # audioscript; missing it would swallow the answer keys into the last test.
 _BACK_MATTER = re.compile(
     r"^(?:"
-    r"(?P<keys>listening and reading answer keys?|answer keys?)"
-    r"|(?P<scripts>audioscripts?|tapescripts?|transcripts?)"
-    r"|(?P<writing>sample (?:writing )?answers?)"
-    r"|(?P<end>acknowledgements?|acknowledgments?)"
+    r"(?P<keys>listening\s*and\s*reading\s*answer\s*keys?|answer\s*keys?)"
+    r"|(?P<scripts>audio\s*scripts?|tape\s*scripts?|transcripts?)"
+    r"|(?P<writing>sample\s*(?:writing\s*)?answers?)"
+    r"|(?P<end>acknowledge?ments?)"
     r")\s*$",
     re.IGNORECASE,
 )
@@ -156,6 +163,32 @@ class Document:
         return None
 
 
+#: Lines longer than this are content, not headings, and are never compacted.
+ANCHOR_MAX_LENGTH = 40
+
+
+def anchor_forms(text: str) -> tuple[str, ...]:
+    """The line as read and, for a short line, with every space removed.
+
+    OCR gets spacing wrong in both directions: it drops spaces ("TEST1",
+    "PART2Questions11-20"), which the \\s* in the anchors absorbs, and it
+    inserts them inside a word with wide letter-spacing ("LISTENIN G"), which
+    only the compacted form survives. Headings are short, so content lines -
+    where compacting could manufacture a false match - are left alone.
+    """
+    if " " in text and len(text) <= ANCHOR_MAX_LENGTH:
+        return text, text.replace(" ", "")
+    return (text,)
+
+
+def match_anchor(pattern: re.Pattern, text: str):
+    for form in anchor_forms(text):
+        match = pattern.match(form)
+        if match:
+            return match
+    return None
+
+
 def is_structural_anchor(text: str) -> bool:
     """True for a line the segmenter needs in order to find structure.
 
@@ -171,17 +204,17 @@ def is_structural_anchor(text: str) -> bool:
         return False
     return bool(
         _test_number(stripped)
-        or _SKILL.match(stripped)
-        or _PART.match(stripped)
-        or _PASSAGE.match(stripped)
-        or _QUESTIONS.match(stripped)
-        or _QUESTION_ONE.match(stripped)
-        or _BACK_MATTER.match(stripped)
+        or match_anchor(_SKILL, stripped)
+        or match_anchor(_PART, stripped)
+        or match_anchor(_PASSAGE, stripped)
+        or match_anchor(_QUESTIONS, stripped)
+        or match_anchor(_QUESTION_ONE, stripped)
+        or match_anchor(_BACK_MATTER, stripped)
     )
 
 
 def _test_number(text: str) -> int | None:
-    match = _TEST.match(text.strip())
+    match = match_anchor(_TEST, text.strip())
     if not match:
         return None
     token = match.group(1).lower()
@@ -215,7 +248,7 @@ def segment(pages: dict[int, list[Line]]) -> Document:
 
             # --- back matter: everything after this belongs to the book, not
             # --- to a test, so close the current test out entirely.
-            matter = _BACK_MATTER.match(text)
+            matter = match_anchor(_BACK_MATTER, text)
             if matter:
                 back_matter_key = next(
                     key for key, value in matter.groupdict().items() if value
@@ -253,7 +286,7 @@ def segment(pages: dict[int, list[Line]]) -> Document:
             if not seen_first_test:
                 continue
 
-            skill_match = _SKILL.match(text)
+            skill_match = match_anchor(_SKILL, text)
             if skill_match and test is not None:
                 skill = skill_match.group(1).lower()
                 existing_module = test.modules.get(skill)
@@ -272,8 +305,8 @@ def segment(pages: dict[int, list[Line]]) -> Document:
             if module is None:
                 continue
 
-            passage_match = _PASSAGE.match(text)
-            part_match = _PART.match(text)
+            passage_match = match_anchor(_PASSAGE, text)
+            part_match = match_anchor(_PART, text)
             header_match = passage_match or (
                 part_match if module.skill == READING else None
             )
@@ -310,8 +343,8 @@ def segment(pages: dict[int, list[Line]]) -> Document:
                     expect_section_range = True
                 continue
 
-            questions_match = _QUESTIONS.match(text)
-            single_match = _QUESTION_ONE.match(text)
+            questions_match = match_anchor(_QUESTIONS, text)
+            single_match = match_anchor(_QUESTION_ONE, text)
 
             # "PART 1" is followed by "Questions 1-10" - the part's overall span.
             # Usually that is a summary and the real groups follow as narrower

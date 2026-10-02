@@ -98,6 +98,32 @@ docker logs --tail 120 ielts_backend
 docker logs --tail 80 ielts_frontend
 ```
 
+## Reading & Listening: importing books and checking answer keys
+
+```powershell
+# Parse a book into a draft (no database writes). OCR runs automatically on
+# scanned pages; --no-ocr turns it off.
+docker exec ielts_backend python manage.py import_cambridge "/app/data/Cambridge 19.pdf" --book cambridge-19 --dry-run --out /app/data/c19-draft
+```
+
+`report.txt` shows, per module, how many questions and answers were found and the
+answer-key self-check verdict: how many answers are **trusted**, how many need a look,
+and how many are missing.
+
+- Scanned books are deskewed and cleaned before OCR. Their answer-key pages are re-read
+  one column at a time, and that reading is compared with the page reading.
+- Every answer is checked against things that don't need the answer itself: it is one of
+  the options, it fits the word limit, it is printed in the passage or audioscript, and
+  the two readings agree.
+- **Blind review** (on by default in *Admin → Exams → answer key*) is for an admin who
+  will also sit the test. Answers stay hidden. Only the flagged ones are opened, one at a
+  time, next to a crop of the book's own key row, and the rest are verified without being
+  shown.
+- After sitting a test, staff can use the flag button on the results page to fix a
+  misread key against the printed row. Every submitted attempt is re-marked.
+
+OCR settings (`EXAMS_OCR_*`) are described in `backend/.env.example`.
+
 ## Notes
 
 - Frontend source is in `frontend` (not `fromtend`).

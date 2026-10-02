@@ -21,7 +21,16 @@ function KeyBadge({ module }: { module: AdminModule }) {
   if (module.answer_sheet_verified) {
     return <Badge className="bg-emerald-600 hover:bg-emerald-600">Verified</Badge>;
   }
-  return <Badge className="bg-amber-500 hover:bg-amber-500">Needs checking</Badge>;
+  // How many answers still need a person - not which, and not what they are.
+  const counts = module.answer_sheet_counts;
+  const outstanding = counts ? counts.check + counts.missing : null;
+  return (
+    <Badge className="bg-amber-500 hover:bg-amber-500">
+      {outstanding === null
+        ? 'Needs checking'
+        : outstanding === 0 ? 'Ready to verify' : `${outstanding} to check`}
+    </Badge>
+  );
 }
 
 const ExamModules = () => {
