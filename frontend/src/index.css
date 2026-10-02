@@ -97,6 +97,65 @@
     --sidebar-accent-foreground: 22 50% 70%;
     --sidebar-ring: 22 80% 55%;
   }
+
+  /* Reading mode - Indigo */
+  :root.reading {
+    --primary: 231 62% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 231 45% 94%;
+    --secondary-foreground: 231 62% 32%;
+    --accent: 231 40% 91%;
+    --accent-foreground: 231 62% 32%;
+    --ring: 231 62% 48%;
+    --sidebar-primary: 231 62% 48%;
+    --sidebar-accent: 231 35% 95%;
+    --sidebar-accent-foreground: 231 62% 32%;
+    --sidebar-ring: 231 62% 48%;
+  }
+
+  /* Listening mode - Violet */
+  :root.listening {
+    --primary: 268 60% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 268 45% 94%;
+    --secondary-foreground: 268 60% 35%;
+    --accent: 268 40% 91%;
+    --accent-foreground: 268 60% 35%;
+    --ring: 268 60% 52%;
+    --sidebar-primary: 268 60% 52%;
+    --sidebar-accent: 268 35% 95%;
+    --sidebar-accent-foreground: 268 60% 35%;
+    --sidebar-ring: 268 60% 52%;
+  }
+
+  /* After the light variants, so these win in dark mode. */
+  .dark.reading {
+    --primary: 231 70% 64%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 231 20% 18%;
+    --secondary-foreground: 231 60% 80%;
+    --accent: 231 20% 18%;
+    --accent-foreground: 231 60% 80%;
+    --ring: 231 70% 64%;
+    --sidebar-primary: 231 70% 64%;
+    --sidebar-accent: 231 20% 16%;
+    --sidebar-accent-foreground: 231 60% 80%;
+    --sidebar-ring: 231 70% 64%;
+  }
+
+  .dark.listening {
+    --primary: 268 65% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 268 20% 18%;
+    --secondary-foreground: 268 55% 80%;
+    --accent: 268 20% 18%;
+    --accent-foreground: 268 55% 80%;
+    --ring: 268 65% 66%;
+    --sidebar-primary: 268 65% 66%;
+    --sidebar-accent: 268 20% 16%;
+    --sidebar-accent-foreground: 268 55% 80%;
+    --sidebar-ring: 268 65% 66%;
+  }
 }
 
 @layer base {

@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   PenTool, Users, Bot, Mic, Shield, ChevronLeft,
-  LayoutDashboard
+  LayoutDashboard, BookOpen, Upload
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -13,6 +13,8 @@ const adminNavItems = [
   { id: 'ai', label: 'AI Configuration', icon: Bot, path: '/admin/ai-config' },
   { id: 'speaking', label: 'Speaking Config', icon: Mic, path: '/admin/speaking-config' },
   { id: 'speaking_questions', label: 'Speaking Questions', icon: Mic, path: '/admin/speaking-questions' },
+  { id: 'exams', label: 'Reading & Listening', icon: BookOpen, path: '/admin/exams' },
+  { id: 'exam_import', label: 'Import Books', icon: Upload, path: '/admin/exams/import' },
 ];
 
 const AdminSidebar = () => {
@@ -29,7 +31,8 @@ const AdminSidebar = () => {
 
       <nav className="flex-1 p-3 space-y-1">
         {adminNavItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive = location.pathname === item.path
+            || (item.id === 'exams' && location.pathname.startsWith('/admin/exams/modules'));
           return (
             <button
               key={item.id}

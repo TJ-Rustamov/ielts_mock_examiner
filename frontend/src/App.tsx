@@ -20,6 +20,12 @@ import UserManagement from "./pages/admin/UserManagement";
 import AIConfiguration from "./pages/admin/AIConfiguration";
 import SpeakingConfig from "./pages/admin/SpeakingConfig";
 import SpeakingQuestions from "./pages/admin/SpeakingQuestions";
+import ExamModules from "./pages/admin/ExamModules";
+import ExamImport from "./pages/admin/ExamImport";
+import AnswerSheetEditor from "./pages/admin/AnswerSheetEditor";
+import ExamHome from "./pages/ExamHome";
+import ExamRunner from "./pages/ExamRunner";
+import ExamResult from "./pages/ExamResult";
 import { getPostAuthRedirectPath, isAdminUser, isAuthenticated } from "./lib/auth";
 
 const queryClient = new QueryClient();
@@ -63,6 +69,10 @@ const App = () => (
             <Route path="/speaking/test/:part" element={<RequireAuth><SpeakingTest /></RequireAuth>} />
             <Route path="/writing/evaluation/:id" element={<RequireAuth><WritingEvaluation /></RequireAuth>} />
             <Route path="/session/:id" element={<RequireAuth><TestSessionDetail /></RequireAuth>} />
+            <Route path="/reading" element={<RequireAuth><ExamHome skill="reading" /></RequireAuth>} />
+            <Route path="/listening" element={<RequireAuth><ExamHome skill="listening" /></RequireAuth>} />
+            <Route path="/exam/result/:attemptId" element={<RequireAuth><ExamResult /></RequireAuth>} />
+            <Route path="/exam/:moduleId" element={<RequireAuth><ExamRunner /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />
             <Route path="/pricing" element={<RequireAuth><Pricing /></RequireAuth>} />
             <Route path="/admin" element={<RequireAdmin><AdminOverview /></RequireAdmin>} />
@@ -71,6 +81,9 @@ const App = () => (
             <Route path="/admin/ai-config" element={<RequireAdmin><AIConfiguration /></RequireAdmin>} />
             <Route path="/admin/speaking-config" element={<RequireAdmin><SpeakingConfig /></RequireAdmin>} />
             <Route path="/admin/speaking-questions" element={<RequireAdmin><SpeakingQuestions /></RequireAdmin>} />
+            <Route path="/admin/exams" element={<RequireAdmin><ExamModules /></RequireAdmin>} />
+            <Route path="/admin/exams/import" element={<RequireAdmin><ExamImport /></RequireAdmin>} />
+            <Route path="/admin/exams/modules/:moduleId/answer-sheet" element={<RequireAdmin><AnswerSheetEditor /></RequireAdmin>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

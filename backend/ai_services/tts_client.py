@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import io
 import math
 import os
@@ -7,8 +9,23 @@ from functools import cached_property
 from typing import Iterator
 from pathlib import Path
 
-import numpy as np
-import soundfile as sf
+# numpy and soundfile ship with the voice extras, which the image only installs
+# when built with INSTALL_VOICE=true. Importing them eagerly made the whole
+# Django URL conf fail to load in a voice-less image, because core.views imports
+# KokoroClient at module scope. Import them tolerantly so the module still
+# loads; instantiating the client is what fails, with a message that says why.
+try:
+    import numpy as np
+    import soundfile as sf
+except ImportError:  # pragma: no cover - depends on build flags
+    np = None
+    sf = None
+
+VOICE_EXTRAS_AVAILABLE = np is not None and sf is not None
+
+
+class MissingVoiceExtras(RuntimeError):
+    """Raised when TTS is used in an image built without the voice extras."""
 
 
 _GLOBAL_PIPELINE = None
@@ -18,6 +35,12 @@ class KokoroClient:
     """Generate WAV bytes from Kokoro model. Falls back to a tone when runtime fails."""
 
     def __init__(self) -> None:
+        if not VOICE_EXTRAS_AVAILABLE:
+            raise MissingVoiceExtras(
+                "Text-to-speech needs the voice extras (numpy, soundfile, kokoro). "
+                "This image was built with INSTALL_VOICE=false; rebuild with "
+                "INSTALL_VOICE=true to enable speaking."
+            )
         self.model_path = os.getenv("KOKORO_MODEL_PATH", "")
         self.voice = os.getenv("KOKORO_VOICE", "af_heart")
         self.lang_code = os.getenv("KOKORO_LANG_CODE", "a")

@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "ai_services",
     "writing",
     "speaking_app",
+    "exams",
 ]
 
 MIDDLEWARE = [
@@ -67,11 +68,18 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": sqlite_path,
+        # WAL lets readers proceed while the exam importer holds a write
+        # transaction; the timeout stops short writes failing instantly when
+        # they do collide. In-memory DBs don't support WAL.
+        "OPTIONS": {"timeout": 20},
     }
 }
 
+if sqlite_path not in (":memory:", "") and not sqlite_path.startswith("file:"):
+    DATABASES["default"]["OPTIONS"]["init_command"] = "PRAGMA journal_mode=WAL;"
+
 if sqlite_path.startswith("file:"):
-    DATABASES["default"]["OPTIONS"] = {"uri": True}
+    DATABASES["default"]["OPTIONS"]["uri"] = True
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
