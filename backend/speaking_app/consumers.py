@@ -19,6 +19,40 @@ from ai_services.vad_service import VADService
 from speaking_app.models import SpeakingSession
 
 
+# Words that say nothing about what a cue card is about.
+_TOPIC_STOPWORDS = {
+    "a", "an", "the", "of", "to", "in", "on", "for", "and", "or", "you", "your", "that", "which",
+    "who", "with", "time", "when", "about", "something", "someone", "describe", "have", "had",
+    "was", "were", "are", "is", "did", "do", "what", "how", "why", "where", "this", "these",
+    "those", "please", "say", "explain", "very", "much", "many", "some", "one",
+}
+# Endings that leave a word's meaning unchanged: Animal/Animals, Transport/Transportation.
+_TOPIC_SUFFIXES = ("s", "es", "ation", "ations")
+
+
+def _topic_words(topic: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z]+", topic.lower()) if len(w) >= 3 and w not in _TOPIC_STOPWORDS]
+
+
+def _same_word(a: str, b: str) -> bool:
+    short, long_ = sorted((a, b), key=len)
+    return short == long_ or any(long_ == short + suffix for suffix in _TOPIC_SUFFIXES)
+
+
+def topics_related(a: str, b: str) -> bool:
+    """True when every meaningful word of the shorter topic appears in the longer one.
+
+    Whole words only. Substring matching paired a cue card with any Part 3 topic
+    hidden inside a word ("Art" inside "party") and sent 38% of tests to a
+    discussion that had nothing to do with the card.
+    """
+    words_a, words_b = _topic_words(a), _topic_words(b)
+    if not words_a or not words_b:
+        return False
+    shorter, longer = sorted((words_a, words_b), key=len)
+    return all(any(_same_word(x, y) for y in longer) for x in shorter)
+
+
 class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         self.gemini_client = GeminiClient()
@@ -195,10 +229,13 @@ class SpeakingTestConsumer(AsyncJsonWebsocketConsumer):
         
         qs = SpeakingQuestion.objects.filter(part=3, is_active=True)
         
-        # Try to match the part 2 topic if provided, otherwise random
+        # Follow the cue card: its own Part 3 first, then a closely related
+        # topic, and only then a random one.
         if part2_topic:
-            # Simple keyword matching
-            matched = [q for q in qs if part2_topic.lower() in q.topic.lower() or q.topic.lower() in part2_topic.lower()]
+            key = part2_topic.strip().lower()
+            matched = [q for q in qs if q.topic.strip().lower() == key]
+            if not matched:
+                matched = [q for q in qs if topics_related(part2_topic, q.topic)]
             if matched:
                 q = random.choice(matched)
             elif list(qs):

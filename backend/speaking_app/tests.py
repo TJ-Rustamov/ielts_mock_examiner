@@ -171,3 +171,48 @@ class SpeakingConsumerTests(TransactionTestCase):
             await communicator.disconnect()
 
         asyncio.run(run_flow())
+
+
+class Part3TopicMatchingTests(TransactionTestCase):
+    """Part 3 has to follow the cue card it comes after."""
+
+    def test_related_topics(self):
+        from speaking_app.consumers import topics_related
+
+        related = [
+            ("Transportation", "Transport"),
+            ("Animal", "Animals"),
+            ("Mobile phone", "Mobile phones"),
+            ("Traditional Product", "Traditional Products"),
+            ("A Time When Someone Apologised To You", "Time When Someone Apologised to You"),
+            ("Hometown", "Famous public place in your hometown"),
+        ]
+        for a, b in related:
+            self.assertTrue(topics_related(a, b), f"{a!r} ~ {b!r}")
+
+    def test_unrelated_topics(self):
+        from speaking_app.consumers import topics_related
+
+        unrelated = [
+            ("A party you attended", "Art"),        # "art" sits inside "party"
+            ("A Person You Know", "Personal"),       # a different word, not a plural
+            ("Climate change", "Exchange students"),
+            ("A time you were late", "Time"),       # only filler words in common
+        ]
+        for a, b in unrelated:
+            self.assertFalse(topics_related(a, b), f"{a!r} !~ {b!r}")
+
+    def test_cue_card_gets_its_own_part3_first(self):
+        import asyncio
+        from unittest.mock import MagicMock
+        from core.models import SpeakingQuestion
+        from speaking_app.consumers import SpeakingTestConsumer
+
+        SpeakingQuestion.objects.create(part=3, topic="Art", questions=["Unrelated?"])
+        SpeakingQuestion.objects.create(part=3, topic="A party you attended", questions=["Own?"])
+        consumer = SpeakingTestConsumer.__new__(SpeakingTestConsumer)
+        consumer.scope = MagicMock()
+        for _ in range(10):
+            topic, questions = asyncio.run(consumer._fetch_random_part3_topic(part2_topic="A party you attended"))
+            self.assertEqual(topic, "A party you attended")
+            self.assertEqual(questions, ["Own?"])
