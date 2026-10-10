@@ -112,6 +112,43 @@ function GapInput({
   );
 }
 
+/** Question numbers that appear as a {{Qn}} placeholder somewhere in the layout. */
+function placedNumbers(blocks: LayoutBlock[] | undefined): Set<number> {
+  const placed = new Set<number>();
+  const text = JSON.stringify(blocks ?? []);
+  for (const match of text.matchAll(PLACEHOLDER)) placed.add(Number(match[1]));
+  return placed;
+}
+
+/**
+ * Inputs for questions the layout never placed.
+ *
+ * A completion group renders its blanks from {{Qn}} placeholders, so a question
+ * the importer failed to place would otherwise have no input at all: the
+ * candidate could not answer it and it would be marked blank however well they
+ * did. Scanned books lose a placeholder here and there, so this safety net
+ * matters more than a tidy layout - the question is still answerable, just
+ * listed under the text rather than inline.
+ */
+function UnplacedGaps(props: GroupRendererProps) {
+  const placed = placedNumbers(props.group.layout);
+  const missing = props.group.questions
+    .map((question) => question.number)
+    .filter((number) => !placed.has(number));
+  if (missing.length === 0) return null;
+
+  return (
+    <div className="space-y-2 rounded-md border border-dashed p-3">
+      {missing.map((number) => (
+        <div key={number} className="flex items-center gap-2 text-sm">
+          <b className="w-6 shrink-0">{number}</b>
+          <GapInput number={number} {...props} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Split text on {{Qn}} and interleave inputs. One regex, one component. */
 function withGaps(text: string, props: GroupRendererProps): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -433,6 +470,7 @@ export function GroupRenderer(props: GroupRendererProps) {
               This question type was not recognised during import
             </Badge>
             <LayoutBlocks blocks={group.layout} props={props} />
+            <UnplacedGaps {...props} />
           </div>
         );
 
@@ -450,6 +488,7 @@ export function GroupRenderer(props: GroupRendererProps) {
             )}
             {group.options.length > 0 && <OptionBank options={group.options} />}
             <LayoutBlocks blocks={group.layout} props={props} />
+            <UnplacedGaps {...props} />
           </div>
         );
     }

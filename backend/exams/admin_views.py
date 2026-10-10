@@ -567,11 +567,19 @@ class AdminModuleDetailAPIView(APIView):
         )
 
 
-#: Matches both conventions seen so far: "T1S1.m4a" and
-#: "cambridge-ielts-21-academic-listening-test-1-3 (2).mp3".
+#: Matches the conventions seen so far: "T1S1.m4a",
+#: "cambridge-ielts-21-academic-listening-test-1-3 (2).mp3",
+#: "Cam 19 - Test 2 - Part 3.mp3" and "C 18 section1-part2.mp3".
+#:
+#: Where a name carries BOTH a section and a part, the section is the outer
+#: number - the test - because a part never contains sections. Older editions
+#: that call the four parts "Section 1-4" never also say "part", so they still
+#: fall to the test/part rule above.
 _AUDIO_PATTERNS = (
     re.compile(r"\bT(\d+)\s*S(\d+)\b", re.IGNORECASE),
-    re.compile(r"test[\s_-]*(\d+)[\s_-]+(?:part[\s_-]*)?(\d+)", re.IGNORECASE),
+    re.compile(r"test[\s_-]*(\d+)[\s_-]+(?:part[\s_-]*|section[\s_-]*)?(\d+)",
+               re.IGNORECASE),
+    re.compile(r"section[\s_-]*(\d+)[\s_-]*part[\s_-]*(\d+)", re.IGNORECASE),
     re.compile(r"\b(\d+)[\s_-]+(\d+)\b"),
 )
 

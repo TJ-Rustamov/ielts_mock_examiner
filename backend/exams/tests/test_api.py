@@ -429,3 +429,30 @@ class CorrectAfterAttemptTests(APITestCase):
             {"number": 1, "accepted": "x"}, format="json",
         )
         self.assertEqual(response.status_code, 403)
+
+
+class AudioFilenameTests(APITestCase):
+    """Slot guessing from a filename. Always a suggestion, never authoritative."""
+
+    def test_known_naming_conventions(self):
+        from exams.admin_views import guess_audio_slot
+
+        cases = {
+            "T1S1.m4a": (1, 1),
+            "T4S3.m4a": (4, 3),
+            "cambridge-ielts-21-academic-listening-test-2-3 (2).mp3": (2, 3),
+            "Cam 19 - Test 2 - Part 3.mp3": (2, 3),
+            # "section N" outside a "part N" is the test: a part has no sections.
+            "C 18 section1-part2[@cambridge_library].mp3": (1, 2),
+            "C 18 section2- part4[@cambridge_library].mp3": (2, 4),
+            "C 18 section3 part1 [@cambridge_library].mp3": (3, 1),
+            # Older wording, where the four parts themselves are called sections.
+            "Test 3 Section 2.mp3": (3, 2),
+        }
+        for name, expected in cases.items():
+            self.assertEqual(guess_audio_slot(name), expected, name)
+
+    def test_an_unreadable_name_guesses_nothing(self):
+        from exams.admin_views import guess_audio_slot
+
+        self.assertEqual(guess_audio_slot("listening audio.mp3"), (None, None))
