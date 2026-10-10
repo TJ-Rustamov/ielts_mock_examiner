@@ -3,7 +3,7 @@ from django.urls import path
 from accounts.views import (
     LoginAPIView, LogoutAPIView, MeAPIView, RegisterAPIView,
     UpdateUsernameAPIView, UpdatePasswordAPIView, DeleteAccountAPIView,
-    UpdateAvatarAPIView, CheckPasswordAPIView
+    UpdateAvatarAPIView, CheckPasswordAPIView, SecuritySettingsAPIView
 )
 
 urlpatterns = [
@@ -15,5 +15,6 @@ urlpatterns = [
     path("update-password", UpdatePasswordAPIView.as_view(), name="auth-update-password"),
     path("check-password", CheckPasswordAPIView.as_view(), name="auth-check-password"),
     path("update-avatar", UpdateAvatarAPIView.as_view(), name="auth-update-avatar"),
+    path("security-settings", SecuritySettingsAPIView.as_view(), name="auth-security-settings"),
     path("delete-account", DeleteAccountAPIView.as_view(), name="auth-delete-account"),
 ]

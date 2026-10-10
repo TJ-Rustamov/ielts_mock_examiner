@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts import security
 from accounts.serializers import LoginSerializer, RegisterSerializer
 
 User = get_user_model()
@@ -122,6 +123,28 @@ class UpdateAvatarAPIView(APIView):
         profile.avatar_url = avatar_url
         profile.save()
         return Response({"success": True})
+
+class SecuritySettingsAPIView(APIView):
+    """The user's own test-security switches: GET to read, PATCH to change some."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        return Response({"settings": security.effective(profile.security_settings)})
+
+    def patch(self, request):
+        changes, problems = security.clean(request.data.get("settings"))
+        if problems:
+            return Response(
+                {"error": "invalid_settings", "message": "; ".join(problems)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
+        profile.security_settings = {**(profile.security_settings or {}), **changes}
+        profile.save(update_fields=["security_settings"])
+        return Response({"settings": security.effective(profile.security_settings)})
+
 
 class CheckPasswordAPIView(APIView):
     permission_classes = [IsAuthenticated]

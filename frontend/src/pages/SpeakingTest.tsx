@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Mic, Volume2, CheckCircle2, Loader2, Square } from 'lucide-react';
+import { AlertTriangle, Mic, Volume2, CheckCircle2, Loader2, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  chooseDevice, createSafeAudioContext, hasUnsafeDevice, listAudioDevices, rememberMicrophone,
+  rememberedMicrophone, safeDevices, type AudioDevice,
+} from '@/lib/audio-devices';
+import { useSecuritySettings } from '@/lib/security-settings';
 import Layout from '@/components/Layout';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useThemeContext } from '@/contexts/ThemeContext';
@@ -109,6 +115,12 @@ const SpeakingTest = () => {
   const [firstExaminerAudioReceived, setFirstExaminerAudioReceived] = useState(false);
   const [timerPhase, setTimerPhase] = useState<'idle' | 'prep' | 'speaking'>('idle');
   const [cueCardText, setCueCardText] = useState<string>('');
+  // Microphones safe to open, and the one this test will use. See lib/audio-devices.
+  const [microphones, setMicrophones] = useState<AudioDevice[]>([]);
+  const [microphoneId, setMicrophoneId] = useState<string | undefined>(undefined);
+  const [unsafeAudioDevice, setUnsafeAudioDevice] = useState(false);
+  const audioDevicesRef = useRef<AudioDevice[]>([]);
+  const security = useSecuritySettings();
 
   const socketRef = useRef<WebSocket | null>(null);
   const playbackQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -134,6 +146,27 @@ const SpeakingTest = () => {
   const messagesTopRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => { setStudyMode('speaking'); }, [setStudyMode]);
+
+  /** Re-read the device list; keeps the remembered microphone if it is still safe. */
+  const refreshAudioDevices = useCallback(async () => {
+    const devices = await listAudioDevices();
+    audioDevicesRef.current = devices;
+    setMicrophones(safeDevices(devices, 'audioinput'));
+    setUnsafeAudioDevice(hasUnsafeDevice(devices));
+    const choice = chooseDevice(devices, 'audioinput', rememberedMicrophone());
+    setMicrophoneId(choice.deviceId);
+    return devices;
+  }, []);
+
+  useEffect(() => {
+    void refreshAudioDevices();
+    const media = navigator.mediaDevices;
+    if (!media?.addEventListener) return;
+    // A headset plugged in or out changes what is safe to open.
+    const onChange = () => { void refreshAudioDevices(); };
+    media.addEventListener('devicechange', onChange);
+    return () => media.removeEventListener('devicechange', onChange);
+  }, [refreshAudioDevices]);
 
   useEffect(() => {
     if (testState !== 'recording') return;
@@ -437,7 +470,7 @@ const SpeakingTest = () => {
 
       try {
         if (!audioContextRef.current) {
-          audioContextRef.current = new AudioContext({ sampleRate: 16000 });
+          audioContextRef.current = createSafeAudioContext({ sampleRate: 16000 }, audioDevicesRef.current);
         }
         const ctx = audioContextRef.current;
         if (ctx.state === 'suspended') {
@@ -516,6 +549,9 @@ const SpeakingTest = () => {
 
   useEffect(() => {
     if (!sessionStarted || testState === 'finished') return;
+    // The user's own switches, from Settings > Test security.
+    const cancelOnLeave = security.leave_window_cancels_speaking;
+    const warnOnClose = security.warn_before_leaving_page;
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -539,16 +575,18 @@ const SpeakingTest = () => {
       return '';
     };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("blur", handleBlur);
-    window.addEventListener("beforeunload", handleBeforeUnload);
+    if (cancelOnLeave) {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+      window.addEventListener("blur", handleBlur);
+    }
+    if (warnOnClose) window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [sessionStarted, testState, sessionId]);
+  }, [sessionStarted, testState, sessionId, security.leave_window_cancels_speaking, security.warn_before_leaving_page]);
 
   const queueAudioPlaybackChunk = (chunkId: string, seq: number, isLast: boolean, audioBase64: string, text?: string, newBubble?: boolean) => {
     console.log(`Received audio chunk: id=${chunkId}, seq=${seq}, isLast=${isLast}, base64Len=${audioBase64.length}`);
@@ -698,6 +736,18 @@ const SpeakingTest = () => {
     setError(null);
     setStartingSession(true);
     try {
+      // Choose the microphone before starting a session: opening the wrong
+      // device (Steam's leftover virtual microphone) crashes Windows outright.
+      const microphone = chooseDevice(
+        await listAudioDevices(), 'audioinput', microphoneId ?? rememberedMicrophone(),
+      );
+      if (microphone.reason === 'none-safe') {
+        throw new Error(
+          'The only microphone available is a Steam Streaming device, which is known to crash '
+          + 'Windows. Connect or enable a real microphone and try again.',
+        );
+      }
+
       stopRequestedRef.current = false;
       setFirstExaminerAudioReceived(false);
       await connectSocket();
@@ -710,11 +760,18 @@ const SpeakingTest = () => {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          // Undefined only before the site has microphone permission, when the
+          // browser hides device names and opens its default regardless.
+          ...(microphone.deviceId ? { deviceId: { exact: microphone.deviceId } } : {}),
         },
       });
       mediaStreamRef.current = stream;
+      if (microphone.deviceId) rememberMicrophone(microphone.deviceId);
 
-      const audioContext = new AudioContext({ sampleRate: 16000 });
+      // Permission is granted now, so device names are visible: refresh the
+      // list (and the picker) and keep the examiner's voice off unsafe outputs.
+      const devices = await refreshAudioDevices();
+      const audioContext = createSafeAudioContext({ sampleRate: 16000 }, devices);
       audioContextRef.current = audioContext;
       sampleRateRef.current = audioContext.sampleRate || 16000;
 
@@ -776,6 +833,13 @@ const SpeakingTest = () => {
           <h1 className="text-2xl font-bold text-foreground mb-2">Speaking Test - Part {part}</h1>
 
           {error && <p className="text-destructive mb-4">{error}</p>}
+          {unsafeAudioDevice && (
+            <p className="mb-4 flex items-center justify-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              A Steam audio driver on this computer is known to crash Windows. This test avoids it;
+              uninstalling it in Device Manager fixes it for good.
+            </p>
+          )}
 
           {testState !== 'finished' && (
             <div className="space-y-4 mt-10">
@@ -830,6 +894,27 @@ const SpeakingTest = () => {
                     <div className="font-mono text-sm font-bold text-foreground">{formatTime(seconds)}</div>
                   </div>
                   <div className="flex items-center justify-center gap-3">
+                    {!sessionStarted && microphones.length > 1 && (
+                      <Select
+                        value={microphoneId}
+                        onValueChange={(deviceId) => {
+                          setMicrophoneId(deviceId);
+                          rememberMicrophone(deviceId);
+                        }}
+                        disabled={startingSession}
+                      >
+                        <SelectTrigger className="h-9 w-56" aria-label="Microphone">
+                          <SelectValue placeholder="Choose a microphone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {microphones.map((device) => (
+                            <SelectItem key={device.deviceId} value={device.deviceId}>
+                              {device.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     {!sessionStarted && (
                       <Button onClick={startRecording} className="gap-2 h-9 glow-sm" disabled={startingSession}>
                         {startingSession ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}

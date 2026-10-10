@@ -35,6 +35,7 @@ import {
   advanceSection, errorMessage, listTests, startAttempt, submitAttempt,
   type AttemptMode, type AttemptState, type ExamSection, type ModuleContent, type ModuleSummary,
 } from '@/lib/exams';
+import { useSecuritySettings } from '@/lib/security-settings';
 import { cn } from '@/lib/utils';
 
 const WARNINGS_AT = [600, 300, 60];
@@ -144,6 +145,8 @@ const ExamRunner = () => {
   const [submitting, setSubmitting] = useState(false);
   const [audioFinished, setAudioFinished] = useState(false);
   const [focusLosses, setFocusLosses] = useState(0);
+  // The user's own switches, from Settings > Test security.
+  const security = useSecuritySettings();
 
   const warned = useRef<Set<number>>(new Set());
   const submittedRef = useRef(false);
@@ -232,13 +235,13 @@ const ExamRunner = () => {
       event.preventDefault();
       event.returnValue = '';
     };
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('beforeunload', onBeforeUnload);
+    if (security.count_leaving_window) document.addEventListener('visibilitychange', onVisibility);
+    if (security.warn_before_leaving_page) window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [attempt]);
+  }, [attempt, security.count_leaving_window, security.warn_before_leaving_page]);
 
   const locations = useMemo(() => {
     const map = new Map<number, { section: number; group: number }>();
@@ -379,7 +382,7 @@ const ExamRunner = () => {
   );
 
   const preventCopy = (event: React.ClipboardEvent) => {
-    if (attempt.mode === 'exam') event.preventDefault();
+    if (attempt.mode === 'exam' && security.block_copying) event.preventDefault();
   };
 
   return (
@@ -426,7 +429,7 @@ const ExamRunner = () => {
         </div>
       </header>
 
-      {focusLosses > 0 && attempt.mode === 'exam' && (
+      {focusLosses > 0 && attempt.mode === 'exam' && security.count_leaving_window && (
         <div className="shrink-0 bg-amber-50 px-4 py-1 text-center text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
           You have left the test window {focusLosses} time{focusLosses === 1 ? '' : 's'}.
         </div>

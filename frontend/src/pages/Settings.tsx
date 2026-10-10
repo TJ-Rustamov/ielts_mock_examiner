@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { User, Trash2, Settings2, Shield } from 'lucide-react';
+import { User, Trash2, Settings2, Shield, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import {
+  useSecuritySettings, useUpdateSecuritySettings, type SecuritySettings,
+} from '@/lib/security-settings';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Layout from '@/components/Layout';
 import ProfileAvatar from '@/components/ProfileAvatar';
@@ -19,6 +24,29 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
+const SECURITY_SWITCHES: { key: keyof SecuritySettings; title: string; description: string }[] = [
+  {
+    key: 'leave_window_cancels_speaking',
+    title: 'Leaving the window cancels a speaking test',
+    description: 'Switching tab or window during a speaking test asks whether to cancel it.',
+  },
+  {
+    key: 'count_leaving_window',
+    title: 'Count leaving a reading or listening test',
+    description: 'In exam mode, shows how many times you left the test window.',
+  },
+  {
+    key: 'block_copying',
+    title: 'Block copying passage text',
+    description: 'In exam mode, stops copying text from reading passages.',
+  },
+  {
+    key: 'warn_before_leaving_page',
+    title: 'Warn before closing a test',
+    description: 'Your browser asks before you close or refresh a page with a test in progress.',
+  },
+];
+
 const Settings = () => {
   const { toast } = useToast();
   const token = getAuthToken();
@@ -26,6 +54,17 @@ const Settings = () => {
   const logout = () => {
     logoutLocal();
     window.location.href = '/';
+  };
+  const security = useSecuritySettings();
+  const updateSecurity = useUpdateSecuritySettings();
+  const toggleSecurity = (key: keyof SecuritySettings, value: boolean) => {
+    updateSecurity.mutate({ [key]: value }, {
+      onError: () => toast({
+        title: 'Not saved',
+        description: 'Your change could not be saved. Please try again.',
+        variant: 'destructive',
+      }),
+    });
   };
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || '??');
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
@@ -229,6 +268,33 @@ const Settings = () => {
                 <Button className="glow-sm" onClick={handleUpdatePassword} disabled={isUpdatingPassword || !isCurrentPasswordCorrect}>
                   {isUpdatingPassword ? 'Updating...' : 'Update Password'}
                 </Button>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div variants={item}>
+            <Card className="mb-6 hover:glow-sm transition-shadow">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-primary" /> Test security
+                </CardTitle>
+                <CardDescription>Choose which exam rules apply when you take a test</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {SECURITY_SWITCHES.map(({ key, title, description }) => (
+                  <div key={key} className="flex items-start justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <Label htmlFor={`security-${key}`} className="text-sm font-medium">{title}</Label>
+                      <p className="text-sm text-muted-foreground">{description}</p>
+                    </div>
+                    <Switch
+                      id={`security-${key}`}
+                      checked={security[key]}
+                      onCheckedChange={(value) => toggleSecurity(key, value)}
+                      disabled={updateSecurity.isPending}
+                    />
+                  </div>
+                ))}
               </CardContent>
             </Card>
           </motion.div>
