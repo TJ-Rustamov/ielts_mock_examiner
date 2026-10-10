@@ -3610,6 +3610,10 @@
         {
           "id": 4,
           "text": "how you got (or, earned) the money"
+        },
+        {
+          "id": 5,
+          "text": "and explain how you felt when (or, after) you bought it."
         }
       ]
     },
@@ -4047,6 +4051,10 @@
         {
           "id": 4,
           "text": "What kind of food do you like there/ What kind of food is famous?"
+        },
+        {
+          "id": 5,
+          "text": "And say why you like it."
         }
       ]
     },
@@ -4146,11 +4154,28 @@
       "id": 101,
       "topic": "Science",
       "cue_card": "Describe an area of science that you are interested in. You should say",
-      "points": []
+      "points": [
+        {
+          "id": 1,
+          "text": "What it is"
+        },
+        {
+          "id": 2,
+          "text": "What you can learn from it"
+        },
+        {
+          "id": 3,
+          "text": "When you started becoming interested in it"
+        },
+        {
+          "id": 4,
+          "text": "And explain how this area of science helps you"
+        }
+      ]
     },
     {
       "id": 102,
-      "topic": "And explain how this area of science helps you",
+      "topic": "Science",
       "cue_card": "Describe a scientific subject that you learned about in high school. You should say:",
       "points": [
         {
@@ -4451,7 +4476,24 @@
       "id": 115,
       "topic": "Traditional Product",
       "cue_card": "Talk about a traditional product which is very popular in your country. You should say",
-      "points": []
+      "points": [
+        {
+          "id": 1,
+          "text": "What the product is"
+        },
+        {
+          "id": 2,
+          "text": "How it is made"
+        },
+        {
+          "id": 3,
+          "text": "Why it is popular"
+        },
+        {
+          "id": 4,
+          "text": "And if it is popular in other countries."
+        }
+      ]
     },
     {
       "id": 116,

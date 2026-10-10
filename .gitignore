@@ -9,7 +9,6 @@
 !/backend/
 !/frontend/
 !/models/
-!/q2_tests.json
 !/poster/
 
 # Globally ignore OS and editor files
@@ -38,6 +37,11 @@ backend/*.sqlite3
 backend/media/
 backend/staticfiles/
 backend/.env
+
+# Reading/Listening exports hold the books' full passages and answer keys, like
+# materials/ itself; regenerate them with `python manage.py export_exams`.
+backend/question_bank/reading/
+backend/question_bank/listening/
 
 # Models directory ignores
 models/*

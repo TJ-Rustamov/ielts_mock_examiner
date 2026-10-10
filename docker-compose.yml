@@ -45,6 +45,10 @@ services:
       # Source books for the exam importer. Read-only: the importer
       # copies what it needs into media/ and never writes here.
       - ./materials:/materials:ro
+      # Question files: speaking questions are loaded from here and Reading/
+      # Listening exports are written here, so both live in the repo folder
+      # rather than inside the container.
+      - ./backend/question_bank:/app/question_bank
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)\""]
       interval: 10s

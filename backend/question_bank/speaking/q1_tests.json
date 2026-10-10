@@ -1,0 +1,2452 @@
+{
+  "part2": [
+    {
+      "id": 1,
+      "topic": "A time when you missed an appointment",
+      "cue_card": "Describe a time when you missed an appointment. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "when and where it happened"
+        },
+        {
+          "id": 2,
+          "text": "why you missed it"
+        },
+        {
+          "id": 3,
+          "text": "what the consequences were"
+        },
+        {
+          "id": 4,
+          "text": "and explain how you felt about it"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "topic": "A time when you tried to do something but weren’t very successful",
+      "cue_card": "Describe a time when you tried to do something but weren’t very successful. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "when this was"
+        },
+        {
+          "id": 2,
+          "text": "what you tried to do"
+        },
+        {
+          "id": 3,
+          "text": "why you were not successful"
+        },
+        {
+          "id": 4,
+          "text": "and explain how you felt about this"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "topic": "A book that you enjoyed reading because you had to think a lot",
+      "cue_card": "Describe a book that you enjoyed reading because you had to think a lot. Please say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the book was"
+        },
+        {
+          "id": 2,
+          "text": "Why you decided to read it"
+        },
+        {
+          "id": 3,
+          "text": "What you learned from the book"
+        },
+        {
+          "id": 4,
+          "text": "And explain why the book was challenging"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "topic": "A piece of electronic equipment that you find useful",
+      "cue_card": "Describe a piece of electronic equipment that you find useful. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "what it is"
+        },
+        {
+          "id": 2,
+          "text": "how you learned to use it"
+        },
+        {
+          "id": 3,
+          "text": "what you use it for"
+        },
+        {
+          "id": 4,
+          "text": "and explain why you find it useful"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "topic": "A time when you had to wait in a long line",
+      "cue_card": "Describe a time when you had to wait in a long line. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "Where it was"
+        },
+        {
+          "id": 2,
+          "text": "What you needed to do at the end of the line"
+        },
+        {
+          "id": 3,
+          "text": "How long you had to wait"
+        },
+        {
+          "id": 4,
+          "text": "And explain how you felt about waiting in this line"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "topic": "A time you spent with friends that you enjoyed",
+      "cue_card": "Describe a time you spent with friends that you enjoyed. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "where you were"
+        },
+        {
+          "id": 2,
+          "text": "who you were with"
+        },
+        {
+          "id": 3,
+          "text": "what you did"
+        },
+        {
+          "id": 4,
+          "text": "and explain why you enjoyed the time you spent with your friends"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "topic": "Famous public place in your hometown",
+      "cue_card": "Describe famous public place in your hometown. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "Where the place is?"
+        },
+        {
+          "id": 2,
+          "text": "What you can see there?"
+        },
+        {
+          "id": 3,
+          "text": "What people do there?"
+        },
+        {
+          "id": 4,
+          "text": "Explain why this place is famous?"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "topic": "A piece of technology (not a computer) that you use often",
+      "cue_card": "Describe a piece of technology (not a computer) that you use often. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the technology is"
+        },
+        {
+          "id": 2,
+          "text": "how you learnt to use it"
+        },
+        {
+          "id": 3,
+          "text": "what you use it for"
+        },
+        {
+          "id": 4,
+          "text": "and explain why it is important to you"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "topic": "A memorable event you've attended in the past",
+      "cue_card": "Describe a memorable event you've attended in the past.",
+      "points": [
+        {
+          "id": 1,
+          "text": "You should say:"
+        },
+        {
+          "id": 2,
+          "text": "What the event was"
+        },
+        {
+          "id": 3,
+          "text": "Where and when it happened"
+        },
+        {
+          "id": 4,
+          "text": "What you saw or did"
+        },
+        {
+          "id": 5,
+          "text": "And explain why it was memorable"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "topic": "A book that you recently read",
+      "cue_card": "Describe a book that you recently read. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the book was"
+        },
+        {
+          "id": 2,
+          "text": "Why you chose to read it"
+        },
+        {
+          "id": 3,
+          "text": "What the book is about"
+        },
+        {
+          "id": 4,
+          "text": "and explain how you felt about the book"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "topic": "A time when you had to change your plans because of the weather",
+      "cue_card": "Describe a time when you had to change your plans because of the weather. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What were your original plans?"
+        },
+        {
+          "id": 2,
+          "text": "What was the weather like?"
+        },
+        {
+          "id": 3,
+          "text": "What changes did you have to make?"
+        },
+        {
+          "id": 4,
+          "text": "And explain how you felt about the changes"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "topic": "An occasion when you received a good service from a company or a shop",
+      "cue_card": "Describe an occasion when you received a good service from a company or a shop. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What service it was"
+        },
+        {
+          "id": 2,
+          "text": "Where and when you received the service"
+        },
+        {
+          "id": 3,
+          "text": "What particularly pleased you about the service"
+        },
+        {
+          "id": 4,
+          "text": "And explain if you told others about this excellent service"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "topic": "A journey (by car, plane, boat) that you remember well",
+      "cue_card": "Describe a journey (by car, plane, boat) that you remember well. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "where you went"
+        },
+        {
+          "id": 2,
+          "text": "how you travelled"
+        },
+        {
+          "id": 3,
+          "text": "why you went on the journey"
+        },
+        {
+          "id": 4,
+          "text": "and explain why you remember this journey well"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "topic": "A time when you were very busy",
+      "cue_card": "Describe a time when you were very busy.",
+      "points": [
+        {
+          "id": 1,
+          "text": "You should say:"
+        },
+        {
+          "id": 2,
+          "text": "When was it?"
+        },
+        {
+          "id": 3,
+          "text": "Why you were busy?"
+        },
+        {
+          "id": 4,
+          "text": "How you managed your time?"
+        },
+        {
+          "id": 5,
+          "text": "And explain how you felt about being so busy"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "topic": "A time when you were excited about a future event",
+      "cue_card": "Describe a time when you were excited about a future event. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the event was"
+        },
+        {
+          "id": 2,
+          "text": "When and where it happened"
+        },
+        {
+          "id": 3,
+          "text": "Who you told about this event"
+        },
+        {
+          "id": 4,
+          "text": "And explain why you were excited about this event"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "topic": "A place you have been to that is full of colour",
+      "cue_card": "Describe a place you have been to that is full of colour. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "Where it was"
+        },
+        {
+          "id": 2,
+          "text": "What it looked like"
+        },
+        {
+          "id": 3,
+          "text": "What you did there"
+        },
+        {
+          "id": 4,
+          "text": "And explain why it was full of colour"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "topic": "A piece of art (painting, sculpture, etc.) that you like",
+      "cue_card": "Describe a piece of art (painting, sculpture, etc.) that you like. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "where you saw it"
+        },
+        {
+          "id": 2,
+          "text": "what it looks like"
+        },
+        {
+          "id": 3,
+          "text": "why you like it"
+        },
+        {
+          "id": 4,
+          "text": "And explain your feelings when you first saw it"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "topic": "An article you read in a magazine or on the internet about healthy living",
+      "cue_card": "Describe an article you read in a magazine or on the internet about healthy living. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "where you read it"
+        },
+        {
+          "id": 2,
+          "text": "what the article was about"
+        },
+        {
+          "id": 3,
+          "text": "how the article made you feel"
+        },
+        {
+          "id": 4,
+          "text": "and explain why you remember this article"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "topic": "A film or TV show that made you laugh",
+      "cue_card": "Describe a film or TV show that made you laugh. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "what film or TV show it was"
+        },
+        {
+          "id": 2,
+          "text": "when and where you watched it"
+        },
+        {
+          "id": 3,
+          "text": "what it was about"
+        },
+        {
+          "id": 4,
+          "text": "and explain why it made you laugh"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "topic": "An occasion when you ate a kind of food for the first time",
+      "cue_card": "Describe an occasion when you ate a kind of food for the first time. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "Where you ate it"
+        },
+        {
+          "id": 2,
+          "text": "What it was"
+        },
+        {
+          "id": 3,
+          "text": "Why you ate it"
+        },
+        {
+          "id": 4,
+          "text": "and explain how you felt when you tried it"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "topic": "A time when you enjoyed a free day from work or school",
+      "cue_card": "Describe a time when you enjoyed a free day from work or school. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What you did on this day"
+        },
+        {
+          "id": 2,
+          "text": "Who you spent the day with"
+        },
+        {
+          "id": 3,
+          "text": "Where you went"
+        },
+        {
+          "id": 4,
+          "text": "And explain why you enjoyed this particular day"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "topic": "A book you have read recently",
+      "cue_card": "Describe a book you have read recently. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "what the book is"
+        },
+        {
+          "id": 2,
+          "text": "what the book is about"
+        },
+        {
+          "id": 3,
+          "text": "why you chose to read it"
+        },
+        {
+          "id": 4,
+          "text": "And explain how you felt about the book"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "topic": "An interesting conversation you had with someone",
+      "cue_card": "Describe an interesting conversation you had with someone. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "who the person was"
+        },
+        {
+          "id": 2,
+          "text": "where and when you had the conversation"
+        },
+        {
+          "id": 3,
+          "text": "what the conversation was about"
+        },
+        {
+          "id": 4,
+          "text": "and explain why you found the conversation interesting"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "topic": "A piece of electronic equipment that you find useful",
+      "cue_card": "Describe a piece of electronic equipment that you find useful. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What it is"
+        },
+        {
+          "id": 2,
+          "text": "How often you use it"
+        },
+        {
+          "id": 3,
+          "text": "What you use it for"
+        },
+        {
+          "id": 4,
+          "text": "And explain why it is important to you"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "topic": "A piece of technology (not a computer) that you use often",
+      "cue_card": "Describe a piece of technology (not a computer) that you use often. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the technology is"
+        },
+        {
+          "id": 2,
+          "text": "how you learnt to use it"
+        },
+        {
+          "id": 3,
+          "text": "what you use it for"
+        },
+        {
+          "id": 4,
+          "text": "and explain why it is important to you"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "topic": "A book that you have recently read",
+      "cue_card": "Describe a book that you have recently read. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "what the book was"
+        },
+        {
+          "id": 2,
+          "text": "why you decided to read it"
+        },
+        {
+          "id": 3,
+          "text": "what the book was about"
+        },
+        {
+          "id": 4,
+          "text": "and explain how you felt after reading the book"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "topic": "A place full of color that you often visit",
+      "cue_card": "Describe a place full of color that you often visit. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "Where is it?"
+        },
+        {
+          "id": 2,
+          "text": "What it is like?"
+        },
+        {
+          "id": 3,
+          "text": "Why you visit it often?"
+        },
+        {
+          "id": 4,
+          "text": "And explain why it is full of color"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "topic": "A place full of colour that you visited",
+      "cue_card": "Describe a place full of colour that you visited. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "Where it was"
+        },
+        {
+          "id": 2,
+          "text": "What you did there"
+        },
+        {
+          "id": 3,
+          "text": "Why it is full of colour"
+        },
+        {
+          "id": 4,
+          "text": "And explain how you felt about this place"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "topic": "An interesting conversation you had",
+      "cue_card": "Describe an interesting conversation you had. You should explain:",
+      "points": [
+        {
+          "id": 1,
+          "text": "Who you had the conversation with"
+        },
+        {
+          "id": 2,
+          "text": "What the conversation was about"
+        },
+        {
+          "id": 3,
+          "text": "Why you found the conversation interesting"
+        },
+        {
+          "id": 4,
+          "text": "You will have to talk about the topic for 1 to 2 minutes. You have one minute to think about what you are going to say. You can make some notes to help you if you wish"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "topic": "An important decision you made with the help of someone",
+      "cue_card": "Describe an important decision you made with the help of someone. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "who helped you"
+        },
+        {
+          "id": 2,
+          "text": "what the decision was"
+        },
+        {
+          "id": 3,
+          "text": "how this person helped you"
+        },
+        {
+          "id": 4,
+          "text": "and explain why this decision was important to you"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "topic": "A time when you were busy",
+      "cue_card": "Describe a time when you were busy.",
+      "points": [
+        {
+          "id": 1,
+          "text": "You should say:"
+        },
+        {
+          "id": 2,
+          "text": "When it was"
+        },
+        {
+          "id": 3,
+          "text": "What you were busy with"
+        },
+        {
+          "id": 4,
+          "text": "How you managed it"
+        },
+        {
+          "id": 5,
+          "text": "And explain how you felt about being busy"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "topic": "A time when you tried to do something but weren't very successful",
+      "cue_card": "Describe a time when you tried to do something but weren't very successful. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "what you wanted to do"
+        },
+        {
+          "id": 2,
+          "text": "why you were not successful"
+        },
+        {
+          "id": 3,
+          "text": "how you felt about it"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "topic": "A volunteer work you have done",
+      "cue_card": "Describe a volunteer work you have done. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the work was"
+        },
+        {
+          "id": 2,
+          "text": "Where it was and who you worked with"
+        },
+        {
+          "id": 3,
+          "text": "How long the volunteer work lasted"
+        },
+        {
+          "id": 4,
+          "text": "And explain why you chose that specific volunteer work and what you learned from it"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "topic": "A place full of color that you have visited",
+      "cue_card": "Describe a place full of color that you have visited. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "where it is"
+        },
+        {
+          "id": 2,
+          "text": "what you did there"
+        },
+        {
+          "id": 3,
+          "text": "why it is full of color"
+        },
+        {
+          "id": 4,
+          "text": "and explain how you felt about the place"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "topic": "An important decision that you made in your life",
+      "cue_card": "Describe an important decision that you made in your life.",
+      "points": [
+        {
+          "id": 1,
+          "text": "What was the decision?"
+        },
+        {
+          "id": 2,
+          "text": "Why did you have to make such a decision?"
+        },
+        {
+          "id": 3,
+          "text": "What was the result of the decision?"
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "topic": "A volunteer work you have done",
+      "cue_card": "Describe a volunteer work you have done. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the work was"
+        },
+        {
+          "id": 2,
+          "text": "Where it was and who you worked with"
+        },
+        {
+          "id": 3,
+          "text": "How long the volunteer work lasted"
+        },
+        {
+          "id": 4,
+          "text": "And explain why you chose that specific volunteer work and what you learned from it"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "topic": "A historical period that you are interested in",
+      "cue_card": "Describe a historical period that you are interested in. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the historical period is"
+        },
+        {
+          "id": 2,
+          "text": "Why you are interested in it"
+        },
+        {
+          "id": 3,
+          "text": "What you know about this period"
+        },
+        {
+          "id": 4,
+          "text": "How you have learned about this period"
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "topic": "A time when you helped a friend or a family member with their work or studies",
+      "cue_card": "Describe a time when you helped a friend or a family member with their work or studies. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the situation was"
+        },
+        {
+          "id": 2,
+          "text": "Who the person was"
+        },
+        {
+          "id": 3,
+          "text": "How you helped them"
+        },
+        {
+          "id": 4,
+          "text": "And explain how you felt about it"
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "topic": "A book you have recently read",
+      "cue_card": "Describe a book you have recently read. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the book is?"
+        },
+        {
+          "id": 2,
+          "text": "Who is the author?"
+        },
+        {
+          "id": 3,
+          "text": "What it is about?"
+        },
+        {
+          "id": 4,
+          "text": "And explain why you enjoyed the book or why it was interesting to you"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "topic": "A book that you have read recently",
+      "cue_card": "Talk about a book that you have read recently. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What was the title of the book?"
+        },
+        {
+          "id": 2,
+          "text": "Who was the author of the book?"
+        },
+        {
+          "id": 3,
+          "text": "What was the book about?"
+        },
+        {
+          "id": 4,
+          "text": "Explain why you decided to read this book"
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "topic": "A time when you were lost",
+      "cue_card": "Describe a time when you were lost. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "when and where you got lost"
+        },
+        {
+          "id": 2,
+          "text": "who you were with"
+        },
+        {
+          "id": 3,
+          "text": "what you tried to do and how you felt at that time"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "topic": "A book that you enjoy reading",
+      "cue_card": "Describe a book that you enjoy reading, you should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What this book is"
+        },
+        {
+          "id": 2,
+          "text": "What the book is about"
+        },
+        {
+          "id": 3,
+          "text": "What character or part of the book you like the most"
+        },
+        {
+          "id": 4,
+          "text": "And explain why you like reading this book"
+        },
+        {
+          "id": 5,
+          "text": "You will have one to two minutes to talk about this topic. You will have one minute to prepare what you are going to say"
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "topic": "A family which you like and are happy to know",
+      "cue_card": "Describe a family which you like and are happy to know. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "Who they are"
+        },
+        {
+          "id": 2,
+          "text": "How you know them"
+        },
+        {
+          "id": 3,
+          "text": "What they usually do together"
+        },
+        {
+          "id": 4,
+          "text": "And explain why you like this family"
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "topic": "A time when you faced a lot of pressure in your personal or professional life",
+      "cue_card": "Describe a time when you faced a lot of pressure in your personal or professional life. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the situation was"
+        },
+        {
+          "id": 2,
+          "text": "how you dealt with this pressure"
+        },
+        {
+          "id": 3,
+          "text": "and explain how you felt while facing this situation"
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "topic": "Your favorite season",
+      "cue_card": "Describe your favorite season. Please say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What season is it?"
+        },
+        {
+          "id": 2,
+          "text": "Why do you like it?"
+        },
+        {
+          "id": 3,
+          "text": "How is this season different from other seasons in your country?"
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "topic": "A historical event you have learned about",
+      "cue_card": "Describe a historical event you have learned about. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What the event was"
+        },
+        {
+          "id": 2,
+          "text": "Where it took place"
+        },
+        {
+          "id": 3,
+          "text": "What happened"
+        },
+        {
+          "id": 4,
+          "text": "And why you think it was interesting"
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "topic": "A time when you were excited about an upcoming event",
+      "cue_card": "Describe a time when you were excited about an upcoming event. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "what the event was"
+        },
+        {
+          "id": 2,
+          "text": "why you were excited"
+        },
+        {
+          "id": 3,
+          "text": "what you did to prepare"
+        },
+        {
+          "id": 4,
+          "text": "and explain how the event actually turned out"
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "topic": "A person you have seen who is beautiful or handsome",
+      "cue_card": "Describe a person you have seen who is beautiful or handsome. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "who the person is"
+        },
+        {
+          "id": 2,
+          "text": "where you saw them"
+        },
+        {
+          "id": 3,
+          "text": "what they were doing"
+        },
+        {
+          "id": 4,
+          "text": "and explain why you found them attractive"
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "topic": "A small business that you admire",
+      "cue_card": "Describe a small business that you admire. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "What this business is"
+        },
+        {
+          "id": 2,
+          "text": "Where it is"
+        },
+        {
+          "id": 3,
+          "text": "What it sells"
+        },
+        {
+          "id": 4,
+          "text": "Why you admire it"
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "topic": "A book that had a significant influence on you",
+      "cue_card": "Describe a book that had a significant influence on you. You should say:",
+      "points": [
+        {
+          "id": 1,
+          "text": "what the book is"
+        },
+        {
+          "id": 2,
+          "text": "how you first heard of the book"
+        },
+        {
+          "id": 3,
+          "text": "what the main story of the book is"
+        },
+        {
+          "id": 4,
+          "text": "and explain why it played such an influential role in your life"
+        }
+      ]
+    }
+  ],
+  "part3": [
+    {
+      "id": 1,
+      "topic": "A time when you missed an appointment",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Why do you think people sometimes fail to keep their appointments?"
+        },
+        {
+          "id": 2,
+          "text": "What effects can this have on personal relationships?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think technology can help prevent missing appointments?"
+        },
+        {
+          "id": 4,
+          "text": "Do people in your country consider punctuality important?"
+        },
+        {
+          "id": 5,
+          "text": "What consequences may arise in a job if you are frequently late?"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "topic": "A time when you tried to do something but weren’t very successful",
+      "questions": [
+        {
+          "id": 1,
+          "text": "In what kinds of situations people may fail to achieve their goals?"
+        },
+        {
+          "id": 2,
+          "text": "What kind of challenges people generally face when they try to achieve something for the first time?"
+        },
+        {
+          "id": 3,
+          "text": "Why do you think some people are afraid of failing?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think failure is a part of success?"
+        },
+        {
+          "id": 5,
+          "text": "How can teachers educate students to manage failure?"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "topic": "A book that you enjoyed reading because you had to think a lot",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What's the difference between reading a book and watching a movie about the same story?"
+        },
+        {
+          "id": 2,
+          "text": "Are books still important sources of information in this digital age?"
+        },
+        {
+          "id": 3,
+          "text": "Do people in your country have a reading habit?"
+        },
+        {
+          "id": 4,
+          "text": "How can parents motivate their children to read more books?"
+        },
+        {
+          "id": 5,
+          "text": "Is it important for writers to challenge the reader?"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "topic": "A piece of electronic equipment that you find useful",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think people rely too much on electronic devices these days?"
+        },
+        {
+          "id": 2,
+          "text": "What’s your opinion on how technology has changed education?"
+        },
+        {
+          "id": 3,
+          "text": "How do you think electronic gadgets have brought changes to society?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think there may be negative effects of overusing electronic equipment? If so, what are they?"
+        },
+        {
+          "id": 5,
+          "text": "What new electronic devices do you think will be invented in the future?"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "topic": "A time when you had to wait in a long line",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Why do you think some people become impatient when they have to wait in line?"
+        },
+        {
+          "id": 2,
+          "text": "What kinds of problems can happen when people do not wait their turn?"
+        },
+        {
+          "id": 3,
+          "text": "In your country, how do people feel about waiting in lines?"
+        },
+        {
+          "id": 4,
+          "text": "What strategies can businesses use to reduce waiting times for customers?"
+        },
+        {
+          "id": 5,
+          "text": "Do you think people's attitudes towards waiting have changed in recent times?"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "topic": "A time you spent with friends that you enjoyed",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What do you usually do when you spend time with your friends?"
+        },
+        {
+          "id": 2,
+          "text": "Do you prefer to spend time with one friend or a group of friends? Why?"
+        },
+        {
+          "id": 3,
+          "text": "How do you think technology has changed the way young people socialize?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think it is important for people to have time for their friends? Why or why not?"
+        },
+        {
+          "id": 5,
+          "text": "In your opinion, do friendships change as we get older? In what ways?"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "topic": "Famous public place in your hometown",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What historical places are tourists attracted to in your country?"
+        },
+        {
+          "id": 2,
+          "text": "Why is it important for us to visit historical places?"
+        },
+        {
+          "id": 3,
+          "text": "What do you think is the value of public spaces in cities?"
+        },
+        {
+          "id": 4,
+          "text": "What can be done to make public places more interesting for people, especially the youth?"
+        },
+        {
+          "id": 5,
+          "text": "What attributes should a good public space have?"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "topic": "A piece of technology (not a computer) that you use often",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think technology makes life better or worse? Why?"
+        },
+        {
+          "id": 2,
+          "text": "What impact has technology had on communication?"
+        },
+        {
+          "id": 3,
+          "text": "How do you think technology will change in the future?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think it is important for older people to be tech savvy? Why?"
+        },
+        {
+          "id": 5,
+          "text": "What are the disadvantages of relying too heavily on technology?"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "topic": "A memorable event you've attended in the past",
+      "questions": [
+        {
+          "id": 1,
+          "text": "How do events like the one you described contribute to a person's social life?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think traditional events and festivals are still important in modern society?"
+        },
+        {
+          "id": 3,
+          "text": "How does the internet and technology impact how events are organized and attended today?"
+        },
+        {
+          "id": 4,
+          "text": "What can we learn from attending events or festivals from different cultures?"
+        },
+        {
+          "id": 5,
+          "text": "Do you think it's better to enjoy special events with family or with friends? Why?"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "topic": "A book that you recently read",
+      "questions": [
+        {
+          "id": 1,
+          "text": "How often do you read books?"
+        },
+        {
+          "id": 2,
+          "text": "Do you prefer to read fiction or non-fiction books and why?"
+        },
+        {
+          "id": 3,
+          "text": "What type of books do you think children should be encouraged to read?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think technology is changing the way people read?"
+        },
+        {
+          "id": 5,
+          "text": "What do you think are the benefits of reading?"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "topic": "A time when you had to change your plans because of the weather",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think weather patterns are changing in your country? Why or why not?"
+        },
+        {
+          "id": 2,
+          "text": "How does the weather affect people's daily lives in your country?"
+        },
+        {
+          "id": 3,
+          "text": "Do you believe humans are significantly impacting the climate? Why or why not?"
+        },
+        {
+          "id": 4,
+          "text": "What do you think can be done to mitigate the effects of climate change?"
+        },
+        {
+          "id": 5,
+          "text": "Can you describe a time when extreme weather affected transportation or communication in your country?"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "topic": "An occasion when you received a good service from a company or a shop",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Why do you think good service is important to companies?"
+        },
+        {
+          "id": 2,
+          "text": "How do people normally respond when they get good service?"
+        },
+        {
+          "id": 3,
+          "text": "In what sectors do you think good service is particularly important and why?"
+        },
+        {
+          "id": 4,
+          "text": "What do companies typically do to try and improve their service?"
+        },
+        {
+          "id": 5,
+          "text": "Can online shopping provide the same quality of service as traditional shopping?"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "topic": "A journey (by car, plane, boat) that you remember well",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you like to travel by car, or do you prefer other means of transport?"
+        },
+        {
+          "id": 2,
+          "text": "Why do you think some people enjoy long journeys more than others do?"
+        },
+        {
+          "id": 3,
+          "text": "How has tourism changed in your country in recent years?"
+        },
+        {
+          "id": 4,
+          "text": "What environmental impacts do you think travel and tourism can have?"
+        },
+        {
+          "id": 5,
+          "text": "In what ways can tourism be harmful to a culture or a place?"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "topic": "A time when you were very busy",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What are the common causes of having a busy life?"
+        },
+        {
+          "id": 2,
+          "text": "How do people's lifestyles change when they get busy?"
+        },
+        {
+          "id": 3,
+          "text": "How does being busy impact on a person's health?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think people today are busier than in the past? Why?"
+        },
+        {
+          "id": 5,
+          "text": "What can people do to manage their time effectively when they are busy?"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "topic": "A time when you were excited about a future event",
+      "questions": [
+        {
+          "id": 1,
+          "text": "How do people usually celebrate big events in your culture?"
+        },
+        {
+          "id": 2,
+          "text": "Are there any specific events or festivals in your culture that are particularly exciting?"
+        },
+        {
+          "id": 3,
+          "text": "Is there a difference between how younger and older people celebrate events in your culture? Can you explain how?"
+        },
+        {
+          "id": 4,
+          "text": "In your culture, how important is it to celebrate traditional holidays or events?"
+        },
+        {
+          "id": 5,
+          "text": "Do televised events or festivals have the same impact on excitement as attending such events in person in your view?"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "topic": "A place you have been to that is full of colour",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Are colours important in your culture? How?"
+        },
+        {
+          "id": 2,
+          "text": "How do colours affect mood?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think colours influence people's buying behaviour? In what way?"
+        },
+        {
+          "id": 4,
+          "text": "What do you think the colour of a place says about it?"
+        },
+        {
+          "id": 5,
+          "text": "Can colors affect the way people perceive certain places or objects? Why or why not?"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "topic": "A piece of art (painting, sculpture, etc.) that you like",
+      "questions": [
+        {
+          "id": 1,
+          "text": "In your opinion, why is art important in our lives?"
+        },
+        {
+          "id": 2,
+          "text": "How should we introduce children to the world of art?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think everyone can appreciate art or does it require specific knowledge?"
+        },
+        {
+          "id": 4,
+          "text": "What role does art play in education?"
+        },
+        {
+          "id": 5,
+          "text": "Should art be a compulsory subject in schools?"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "topic": "An article you read in a magazine or on the internet about healthy living",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think it's easy for people to live a healthy lifestyle in your country?"
+        },
+        {
+          "id": 2,
+          "text": "In what ways can the government improve the health of their citizens?"
+        },
+        {
+          "id": 3,
+          "text": "Why do you think many people prefer junk food over whole foods, despite knowing it's unhealthy?"
+        },
+        {
+          "id": 4,
+          "text": "To what extent does diet affect a person's health?"
+        },
+        {
+          "id": 5,
+          "text": "How do you feel about the role of technology in promoting healthy living?"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "topic": "A film or TV show that made you laugh",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think humour is important in films and TV shows? Why or why not?"
+        },
+        {
+          "id": 2,
+          "text": "What kinds of films or TV shows are popular in your country?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think films and TV shows influence society? In what ways?"
+        },
+        {
+          "id": 4,
+          "text": "What role does comedy play in a society, in your opinion?"
+        },
+        {
+          "id": 5,
+          "text": "How have films and TV shows changed over time in your country?"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "topic": "An occasion when you ate a kind of food for the first time",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you consider yourself a foodie?"
+        },
+        {
+          "id": 2,
+          "text": "How important do you think it is for people to try new foods?"
+        },
+        {
+          "id": 3,
+          "text": "What are some health benefits or risks of trying new foods?"
+        },
+        {
+          "id": 4,
+          "text": "In what ways can trying new foods reflect the culture of a certain country?"
+        },
+        {
+          "id": 5,
+          "text": "Do you think it's important to have a wide variety of food in our diet?"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "topic": "A time when you enjoyed a free day from work or school",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do people in your country generally have enough free time?"
+        },
+        {
+          "id": 2,
+          "text": "How important are holidays in life? Why?"
+        },
+        {
+          "id": 3,
+          "text": "What do you think are the effects of not having any days off?"
+        },
+        {
+          "id": 4,
+          "text": "What do people in your country usually do to relax during their free time?"
+        },
+        {
+          "id": 5,
+          "text": "Should companies give their employees more vacation time? Why/why not?"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "topic": "A book you have read recently",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you prefer to read electronic books or traditional books? Why?"
+        },
+        {
+          "id": 2,
+          "text": "What types of books are popular in your country?"
+        },
+        {
+          "id": 3,
+          "text": "Why do you think people still read books whilst there are other sources of information available?"
+        },
+        {
+          "id": 4,
+          "text": "Can books be considered an effective educational tool? Why or why not?"
+        },
+        {
+          "id": 5,
+          "text": "Do you think that reading habits will change in the future? How?"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "topic": "An interesting conversation you had with someone",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you often have complex conversations, or do you prefer simpler discussions?"
+        },
+        {
+          "id": 2,
+          "text": "What makes a conversation interesting for you?"
+        },
+        {
+          "id": 3,
+          "text": "Is there a difference between face-to-face conversation and phone conversation? Which one do you prefer?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think conversations are important in relationships? Why or why not?"
+        },
+        {
+          "id": 5,
+          "text": "In what situations might people have difficulty talking to each other?"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "topic": "A piece of electronic equipment that you find useful",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What do you think are the disadvantages of relying too much on electronic equipment?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think electronic equipment has made people less interactive?"
+        },
+        {
+          "id": 3,
+          "text": "To what extent do you think electronic equipment is shaping our society?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think children should be allowed to use electronic equipment whenever they want?"
+        },
+        {
+          "id": 5,
+          "text": "Why do you think technology companies keep updating their products?"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "topic": "A piece of technology (not a computer) that you use often",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think technology makes life better or worse? Why?"
+        },
+        {
+          "id": 2,
+          "text": "What impact has technology had on communication?"
+        },
+        {
+          "id": 3,
+          "text": "How do you think technology will change in the future?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think it is important for older people to be tech savvy? Why?"
+        },
+        {
+          "id": 5,
+          "text": "What are the disadvantages of relying too heavily on technology?"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "topic": "A book that you have recently read",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Has reading this book changed your perception of any specific matters?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think that reading books is important for personal development?"
+        },
+        {
+          "id": 3,
+          "text": "How often do you read books?"
+        },
+        {
+          "id": 4,
+          "text": "What types of books do you typically enjoy reading the most?"
+        },
+        {
+          "id": 5,
+          "text": "How has technology affected the way people read books nowadays?"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "topic": "A place full of color that you often visit",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What is the importance of color in our daily life?"
+        },
+        {
+          "id": 2,
+          "text": "How are colors used to convey messages in your culture?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think different cultures perceive colors differently?"
+        },
+        {
+          "id": 4,
+          "text": "How do colors influence our moods or emotions?"
+        },
+        {
+          "id": 5,
+          "text": "Can colors affect our decision-making process?"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "topic": "A place full of colour that you visited",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think colours have an impact on people's mood?"
+        },
+        {
+          "id": 2,
+          "text": "Why do you think people prefer certain colours over other colours?"
+        },
+        {
+          "id": 3,
+          "text": "Why do children generally like bright colours?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think the use of colours in advertising is effective?"
+        },
+        {
+          "id": 5,
+          "text": "How important is colour in fashion and design?"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "topic": "An interesting conversation you had",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Why do you think conversation skills are important?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think communication skills are being affected by technology? How?"
+        },
+        {
+          "id": 3,
+          "text": "What role does conversation play in relationships?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think children should be taught conversation skills at school? Why/why not?"
+        },
+        {
+          "id": 5,
+          "text": "How can people improve their conversation skills?"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "topic": "An important decision you made with the help of someone",
+      "questions": [
+        {
+          "id": 1,
+          "text": "How do you usually make decisions?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think it's important to consult other people before making a decision?"
+        },
+        {
+          "id": 3,
+          "text": "In your country, do young people make their own decisions or do their parents make decisions for them?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think decisions made quickly are typically good or bad?"
+        },
+        {
+          "id": 5,
+          "text": "Can you provide an example of a situation when it is necessary to make a decision instantly?"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "topic": "A time when you were busy",
+      "questions": [
+        {
+          "id": 1,
+          "text": "How do people in your country handle being busy?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think it's important for people to have downtime?"
+        },
+        {
+          "id": 3,
+          "text": "What types of tasks or activities make people feel most busy in modern life?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think technology helps people cope with a busy lifestyle or adds more pressure?"
+        },
+        {
+          "id": 5,
+          "text": "How does being busy affect one's health and relationships?"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "topic": "A time when you tried to do something but weren't very successful",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think it’s essential to be successful in life?"
+        },
+        {
+          "id": 2,
+          "text": "Can we learn something from our failures?"
+        },
+        {
+          "id": 3,
+          "text": "How do people in your country view failure?"
+        },
+        {
+          "id": 4,
+          "text": "In your opinion, how does the education system in your country deal with failure?"
+        },
+        {
+          "id": 5,
+          "text": "How can failure lead to success in one’s personal or professional life?"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "topic": "A volunteer work you have done",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What is the role of volunteer work in society?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think everyone should participate in volunteer work at some point in their life? Why or why not?"
+        },
+        {
+          "id": 3,
+          "text": "How can volunteer work benefit the person who is doing it?"
+        },
+        {
+          "id": 4,
+          "text": "In what ways can volunteering help to improve social skills?"
+        },
+        {
+          "id": 5,
+          "text": "How does volunteering change the way people view the world?"
+        }
+      ]
+    },
+    {
+      "id": 34,
+      "topic": "A place full of color that you have visited",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What impact do colors have on our moods?"
+        },
+        {
+          "id": 2,
+          "text": "Should people pay attention to the color they wear?"
+        },
+        {
+          "id": 3,
+          "text": "What does the color scheme of a place say about its culture or people?"
+        },
+        {
+          "id": 4,
+          "text": "How important are colors in marketing and advertising?"
+        },
+        {
+          "id": 5,
+          "text": "Do you think different cultures understand and appreciate colors in the same way?"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "topic": "An important decision that you made in your life",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think it's always important to consider other people's opinions before making a major decision?"
+        },
+        {
+          "id": 2,
+          "text": "How do you think decisions made during adolescence impact one’s later life?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think some people are naturally better decision-makers, or is it a skill that anyone can learn?"
+        },
+        {
+          "id": 4,
+          "text": "What are some common difficulties people face when making decisions, in your opinion?"
+        },
+        {
+          "id": 5,
+          "text": "Do you agree that we learn more from the decisions that produced bad outcomes rather than good ones?"
+        }
+      ]
+    },
+    {
+      "id": 36,
+      "topic": "A volunteer work you have done",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What is the role of volunteer work in society?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think everyone should participate in volunteer work at some point in their life? Why or why not?"
+        },
+        {
+          "id": 3,
+          "text": "How can volunteer work benefit the person who is doing it?"
+        },
+        {
+          "id": 4,
+          "text": "In what ways can volunteering help to improve social skills?"
+        },
+        {
+          "id": 5,
+          "text": "How does volunteering change the way people view the world?"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "topic": "A historical period that you are interested in",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think it's important to learn about history? Why or why not?"
+        },
+        {
+          "id": 2,
+          "text": "How does understanding the past help us in the present?"
+        },
+        {
+          "id": 3,
+          "text": "Does your interest in this historical period influence your life in any way?"
+        },
+        {
+          "id": 4,
+          "text": "In what ways do you think the study of history differs from the study of other subjects?"
+        },
+        {
+          "id": 5,
+          "text": "Do you believe that historical movies and books are a good way to learn about the past? Why or why not?"
+        }
+      ]
+    },
+    {
+      "id": 38,
+      "topic": "A time when you helped a friend or a family member with their work or studies",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Who do you believe is more helpful in a student's study, parents or friends?"
+        },
+        {
+          "id": 2,
+          "text": "What are some ways that teachers can help students to succeed?"
+        },
+        {
+          "id": 3,
+          "text": "What is the role of technology in helping students in their studies?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think people have become less willing to help others in today's society? Why?"
+        },
+        {
+          "id": 5,
+          "text": "Can you give some examples of jobs that involve helping others? How valued are these jobs in your culture?"
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "topic": "A book you have recently read",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What kind of books do you prefer to read and why?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think the author’s background can affect the content of a book?"
+        },
+        {
+          "id": 3,
+          "text": "How often do you read books?"
+        },
+        {
+          "id": 4,
+          "text": "Are there any books you would recommend to others? Why?"
+        },
+        {
+          "id": 5,
+          "text": "In what ways can reading help people improve their language skills?"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "topic": "A book that you have read recently",
+      "questions": [
+        {
+          "id": 1,
+          "text": "In your opinion, what makes a book enjoyable to read?"
+        },
+        {
+          "id": 2,
+          "text": "How have books influenced your life?"
+        },
+        {
+          "id": 3,
+          "text": "Do you prefer to read physical books or e-books? Why?"
+        },
+        {
+          "id": 4,
+          "text": "How often do you read books?"
+        },
+        {
+          "id": 5,
+          "text": "Do you think reading habits are changing due to technology? Why or why not?"
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "topic": "A time when you were lost",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What difficulties may people face when they visit a new place?"
+        },
+        {
+          "id": 2,
+          "text": "How important is it to have a guide when visiting a new place?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think technology has made it hard for people to get lost?"
+        },
+        {
+          "id": 4,
+          "text": "Could getting lost possibly have any benefits?"
+        },
+        {
+          "id": 5,
+          "text": "What advice would you give to someone going somewhere new?"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "topic": "A book that you enjoy reading",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think this book would be as enjoyable if it was turned into a movie?"
+        },
+        {
+          "id": 2,
+          "text": "How do you feel about the role of books in educating society?"
+        },
+        {
+          "id": 3,
+          "text": "What kind of books do you think young people should read?"
+        },
+        {
+          "id": 4,
+          "text": "Some people think that digital books will replace paper books in the future. What's your view on this?"
+        },
+        {
+          "id": 5,
+          "text": "How does reading influence a person’s personality or worldview?"
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "topic": "A family which you like and are happy to know",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What role do families play in society?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think families will be more important or less important in the future?"
+        },
+        {
+          "id": 3,
+          "text": "In what ways have families changed in the last 100 years?"
+        },
+        {
+          "id": 4,
+          "text": "How does your culture view the hierarchy within a family?"
+        },
+        {
+          "id": 5,
+          "text": "How might different generations of a family have different views?"
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "topic": "A time when you faced a lot of pressure in your personal or professional life",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think people are more stressed today than in the past? Why?"
+        },
+        {
+          "id": 2,
+          "text": "How do people usually cope with stress in your country?"
+        },
+        {
+          "id": 3,
+          "text": "Should employers do more to help employees deal with stress at work? Why or why not?"
+        },
+        {
+          "id": 4,
+          "text": "Do you think students face too much academic pressure? Why or why not?"
+        },
+        {
+          "id": 5,
+          "text": "Can pressure sometimes have a positive effect? Give examples."
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "topic": "Your favorite season",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you think different types of weather affect people's mood?"
+        },
+        {
+          "id": 2,
+          "text": "What kind of weather do most people in your country prefer?"
+        },
+        {
+          "id": 3,
+          "text": "How does climate change affect seasons and weather patterns?"
+        },
+        {
+          "id": 4,
+          "text": "Which season is the most challenging for people in your country and why?"
+        },
+        {
+          "id": 5,
+          "text": "Do the people in your country do different activities depending on the season?"
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "topic": "A historical event you have learned about",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Why do you think it's important to learn about historical events?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think the way history is taught in schools is effective?"
+        },
+        {
+          "id": 3,
+          "text": "How do historical events influence the present?"
+        },
+        {
+          "id": 4,
+          "text": "In your opinion, what is the most significant historical event of all time?"
+        },
+        {
+          "id": 5,
+          "text": "Do some countries emphasize certain historical events more than others? Why or why not?"
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "topic": "A time when you were excited about an upcoming event",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you usually look forward to events?"
+        },
+        {
+          "id": 2,
+          "text": "How important is it for people to have events to look forward to?"
+        },
+        {
+          "id": 3,
+          "text": "What types of events are most popular in your country?"
+        },
+        {
+          "id": 4,
+          "text": "Can events have a negative impact on people if they don't go as expected?"
+        },
+        {
+          "id": 5,
+          "text": "How do different age groups respond to upcoming events?"
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "topic": "A person you have seen who is beautiful or handsome",
+      "questions": [
+        {
+          "id": 1,
+          "text": "How does the media influence our perception of beauty?"
+        },
+        {
+          "id": 2,
+          "text": "Do you think beauty standards have changed over time? Why or why not?"
+        },
+        {
+          "id": 3,
+          "text": "How important is physical appearance in our society?"
+        },
+        {
+          "id": 4,
+          "text": "Do you believe that inner beauty is more important than outer beauty?"
+        },
+        {
+          "id": 5,
+          "text": "Can beauty be a disadvantage in some situations?"
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "topic": "A small business that you admire",
+      "questions": [
+        {
+          "id": 1,
+          "text": "What difficulties do small businesses typically face?"
+        },
+        {
+          "id": 2,
+          "text": "Why do you think some small businesses are successful while others fail?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think small businesses are more important to the local community than large corporations? Why or why not?"
+        },
+        {
+          "id": 4,
+          "text": "In your opinion, what are the advantages and disadvantages of running a small business?"
+        },
+        {
+          "id": 5,
+          "text": "Do you think it is important for small businesses to keep up with the latest technology? Why or why not?"
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "topic": "A book that had a significant influence on you",
+      "questions": [
+        {
+          "id": 1,
+          "text": "Do you enjoy reading books? Why or why not?"
+        },
+        {
+          "id": 2,
+          "text": "What kinds of books do you prefer to read and why?"
+        },
+        {
+          "id": 3,
+          "text": "Do you think children should be encouraged to read more books?"
+        },
+        {
+          "id": 4,
+          "text": "How has technology affected traditional reading habits?"
+        },
+        {
+          "id": 5,
+          "text": "Do you think the influence of books on people has diminished due to technological advancements?"
+        }
+      ]
+    }
+  ]
+}
