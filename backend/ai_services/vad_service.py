@@ -5,6 +5,31 @@ try:
 except Exception:
     webrtcvad = None
 
+# webrtcvad 2.0.10's Python wrapper imports pkg_resources only to read its own
+# version number, and setuptools 81+ no longer ships pkg_resources, so the
+# import above fails even though the compiled detector it wraps is installed
+# and works. Use that detector directly. Without this the service fell back to
+# _FallbackVad, which counts any non-zero sample as speech: a real microphone is
+# never digitally silent, so the end of a candidate's answer was never detected.
+_webrtcvad = None
+if webrtcvad is None:
+    try:
+        import _webrtcvad  # type: ignore
+    except Exception:
+        _webrtcvad = None
+
+
+class _NativeVad:
+    """webrtcvad.Vad, rebuilt on the compiled module it wraps."""
+
+    def __init__(self, mode: int):
+        self._vad = _webrtcvad.create()
+        _webrtcvad.init(self._vad)
+        _webrtcvad.set_mode(self._vad, mode)
+
+    def is_speech(self, frame: bytes, sample_rate: int) -> bool:
+        return bool(_webrtcvad.process(self._vad, sample_rate, frame, len(frame) // 2))
+
 
 class _FallbackVad:
     def __init__(self, _mode: int):
@@ -25,10 +50,12 @@ class VADService:
     _silence_counter: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
-        if webrtcvad is None:
-            self.vad = _FallbackVad(self.mode)
-        else:
+        if webrtcvad is not None:
             self.vad = webrtcvad.Vad(self.mode)
+        elif _webrtcvad is not None:
+            self.vad = _NativeVad(self.mode)
+        else:
+            self.vad = _FallbackVad(self.mode)
 
     @property
     def frame_bytes(self) -> int:

@@ -84,3 +84,33 @@ class VADServiceTests(SimpleTestCase):
 
         chunk = b"\x00" * service.frame_bytes * 4
         self.assertTrue(service.detect_end_of_speech(chunk))
+
+    def test_uses_a_real_detector_when_one_is_installed(self):
+        """The crude fallback must only be used when no detector exists at all.
+
+        It counts any non-zero sample as speech, and a real microphone is never
+        digitally silent, so with it the end of an answer is never detected.
+        """
+        from ai_services import vad_service
+
+        if vad_service.webrtcvad is None and vad_service._webrtcvad is None:
+            self.skipTest("webrtcvad is not installed here")
+        service = VADService(mode=2)
+        self.assertNotIsInstance(service.vad, vad_service._FallbackVad)
+
+    def test_quiet_room_noise_is_not_speech(self):
+        import random
+        import struct
+
+        from ai_services import vad_service
+
+        if vad_service.webrtcvad is None and vad_service._webrtcvad is None:
+            self.skipTest("webrtcvad is not installed here")
+        service = VADService(mode=2)
+        rng = random.Random(0)
+        # One second of a quiet room: low-level noise, never exact zeros.
+        noise = struct.pack("<16000h", *(int(rng.gauss(0, 40)) for _ in range(16000)))
+        frames = [noise[i:i + service.frame_bytes]
+                  for i in range(0, len(noise) - service.frame_bytes + 1, service.frame_bytes)]
+        as_speech = sum(1 for f in frames if service.vad.is_speech(f, 16000))
+        self.assertLess(as_speech, len(frames) * 0.2)
